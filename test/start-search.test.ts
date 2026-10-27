@@ -194,3 +194,30 @@ test("cleanup runs when runSearch throws unexpectedly", async () => {
   await startSearch(params("u1"), again.r, app);
   assert.match(JSON.stringify(again.last()), /Mã: /);
 });
+
+test("two concurrent searches from the same user: only one proceeds", async () => {
+  const app = makeApp();
+  const a = responder();
+  const b = responder();
+  await Promise.all([startSearch(params("u1"), a.r, app), startSearch(params("u1"), b.r, app)]);
+  const all = [a, b];
+  assert.equal(all.reduce((n, x) => n + x.calls.filter((c) => c.kind === "defer").length, 0), 1);
+  const rejected = all.find((x) => x.calls.length === 1 && x.calls[0].kind === "reply");
+  assert.ok(rejected);
+  assert.match(JSON.stringify(rejected.calls[0].payload), /chưa xong/);
+  assert.equal(app.jobs.active, 0);
+});
+
+test("search_done is logged even when the final edit fails", async () => {
+  const app = makeApp();
+  const res = responder();
+  const r: Responder = { ...res.r, async edit(p) {
+    if (JSON.stringify(p).includes("Mã: ")) throw new Error("discord down");
+    await res.r.edit(p);
+  } };
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (s: unknown) => { lines.push(String(s)); };
+  try { await startSearch(params("u1"), r, app); } finally { console.log = orig; }
+  assert.ok(lines.some((l) => l.includes('"event":"search_done"')));
+});

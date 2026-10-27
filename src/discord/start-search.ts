@@ -69,9 +69,9 @@ export async function startSearch(p: StartSearchParams, r: Responder, app: App):
   }
   if (!app.jobs.tryStart()) return r.replyEphemeral(renderNotice(msg.busy, links));
 
+  app.userLimits.begin(userId, "search");
   try {
     await r.defer(p.ephemeral);
-    app.userLimits.begin(userId, "search");
     let image: LoadedImage;
     if (isLoaded(p.image)) image = p.image;
     else {
