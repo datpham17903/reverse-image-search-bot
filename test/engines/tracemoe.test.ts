@@ -107,3 +107,12 @@ test("getMe parses quota and quotaUsed", async () => {
   assert.deepEqual(me, { quota: 100, quotaUsed: 7 });
   assert.equal(url, "https://api.trace.moe/me");
 });
+
+test("AbortSignal.timeout rejection (TimeoutError) → timeout and sent", async () => {
+  const f = ((_u: string, init: RequestInit) => new Promise((_res, rej) => {
+    init.signal!.addEventListener("abort", () => rej(init.signal!.reason));
+  })) as unknown as typeof fetch;
+  const r = await createTraceMoe({ fetch: f }).search(input({ signal: AbortSignal.timeout(1) }), "tracemoe");
+  assert.equal(r.status, "timeout");
+  assert.equal(r.sent, true);
+});

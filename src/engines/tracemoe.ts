@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { formatTimestamp } from "../util/time.ts";
 import { ImageError } from "../images/download.ts";
-import { PreSendError, sendRequest } from "./http.ts";
+import { PreSendError, isAbortError, sendRequest } from "./http.ts";
 import type { Engine, EngineInput, EngineResponse, Match, ProviderId } from "./types.ts";
 
 const SEARCH_URL = "https://api.trace.moe/search?anilistInfo&cutBorders=1";
@@ -72,7 +72,7 @@ export function createTraceMoe(deps: { fetch: typeof fetch }): Engine & { getMe(
         return { status: "ok", matches: items.map(toMatch), sent: true };
       } catch (err) {
         if (err instanceof PreSendError) return fail("unavailable", false);
-        if ((err as { name?: string } | null)?.name === "AbortError") return fail("timeout", true);
+        if (isAbortError(err, input.signal)) return fail("timeout", true);
         if (err instanceof SyntaxError) return fail("unavailable", true, { parseFailed: true });
         return fail("unavailable", true);
       }

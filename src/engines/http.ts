@@ -25,3 +25,8 @@ export async function sendRequest(f: typeof fetch, url: string, init: RequestIni
     throw err;
   }
 }
+
+export function isAbortError(err: unknown, signal?: AbortSignal): boolean {
+  const name = (err as { name?: string } | null)?.name;
+  return signal?.aborted === true || name === "AbortError" || name === "TimeoutError";
+}
