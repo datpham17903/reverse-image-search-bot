@@ -9,7 +9,8 @@ console.log(`/me status=${meRes.status} quota=${me.quota} quotaUsed=${me.quotaUs
 
 const bytes = await downloadBytes(url);
 const imgRes = await fetch(url, { method: "HEAD" });
-const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
+const headType = imgRes.headers.get("content-type");
+const contentType = imgRes.ok && headType?.startsWith("image/") ? headType : "image/jpeg";
 const res = await fetch("https://api.trace.moe/search?anilistInfo&cutBorders=1", {
   method: "POST",
   headers: { "content-type": contentType },

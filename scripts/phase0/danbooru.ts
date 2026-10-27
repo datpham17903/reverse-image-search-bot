@@ -13,7 +13,7 @@ const res = await fetch(
   },
 );
 const text = await res.text();
-saveFixture("danbooru/iqdb.json", text, [env.DANBOORU_API_KEY, env.DANBOORU_LOGIN]);
+saveFixture("danbooru/iqdb.json", text, [env.DANBOORU_API_KEY]);
 
 console.log(`status=${res.status} x-rate-limit=${res.headers.get("x-rate-limit")}`);
 try {

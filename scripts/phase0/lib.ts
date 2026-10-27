@@ -13,9 +13,13 @@ export function requireEnv(names: string[]): Record<string, string> {
   return Object.fromEntries(names.map((n) => [n, process.env[n] as string]));
 }
 
+// Discord signed-URL params (ex, is, hm) in plain, percent-encoded and HTML-escaped (&amp;) forms.
+const SIGNED_PARAM = /((?:[?&;]|%3F|%26)(?:ex|is|hm)(?:=|%3D))[0-9a-f]+/gi;
+
 export function saveFixture(relPath: string, body: string, secrets: string[]): string {
   let out = body;
   for (const s of secrets) if (s) out = out.split(s).join("REDACTED");
+  out = out.replace(SIGNED_PARAM, "$1REDACTED");
   const path = join(FIXTURES_DIR, relPath);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, out);
@@ -23,7 +27,16 @@ export function saveFixture(relPath: string, body: string, secrets: string[]): s
 }
 
 export async function downloadBytes(url: string): Promise<Buffer> {
-  if (!isDiscordImageUrl(url)) throw new Error(`Not a Discord image URL: ${url}`);
+  if (!isDiscordImageUrl(url)) {
+    let shown = "<invalid url>";
+    try {
+      const u = new URL(url);
+      shown = u.origin + u.pathname;
+    } catch {
+      // keep placeholder
+    }
+    throw new Error(`Not a Discord image URL: ${shown}`);
+  }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
