@@ -23,4 +23,10 @@ docker compose up -d --build
 Bot tự drain các tác vụ đang chạy khi nhận SIGTERM trước khi dừng.
 
 ## Sao lưu
-Dữ liệu nằm ở `data/bot.db` (mount từ `./data`). Sao lưu file này định kỳ, ví dụ `cp data/bot.db backup/bot-$(date +%F).db`.
+Dữ liệu nằm ở `data/bot.db` (mount từ `./data`). Sao lưu khi bot đã dừng:
+```
+docker compose stop bot
+cp data/bot.db backup/bot-$(date +%F).db
+docker compose start bot
+```
+Hoặc không cần dừng bot: `sqlite3 data/bot.db ".backup backup/bot-$(date +%F).db"`.
