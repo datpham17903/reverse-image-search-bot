@@ -18,9 +18,14 @@ export async function downloadImage(url: string, o: { maxBytes: number; timeoutM
   const timer = setTimeout(() => ctl.abort(), o.timeoutMs);
   try {
     const res = await doFetch(url, { redirect: "manual", signal: ctl.signal });
-    if (res.status < 200 || res.status >= 300) throw new ImageError("fetch_failed", `HTTP ${res.status}`);
-    const len = Number(res.headers.get("content-length"));
-    if (Number.isFinite(len) && len > o.maxBytes) throw new ImageError("too_large");
+    if (res.status < 200 || res.status >= 300) {
+      await res.body?.cancel();
+      throw new ImageError("fetch_failed", `HTTP ${res.status}`);
+    }
+    if (res.headers.has("content-length") && Number(res.headers.get("content-length")) > o.maxBytes) {
+      await res.body?.cancel();
+      throw new ImageError("too_large");
+    }
     if (!res.body) throw new ImageError("fetch_failed", "empty body");
     const chunks: Buffer[] = [];
     let total = 0;

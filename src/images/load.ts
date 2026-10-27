@@ -6,6 +6,7 @@ import { normalizeImage } from "./normalize.ts";
 
 export interface LoadedImage extends ImageSource { bytesInMemory(): number }
 
+const DOWNLOAD_TIMEOUT_MS = 10_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function loadImage(
@@ -14,7 +15,7 @@ export async function loadImage(
 ): Promise<LoadedImage> {
   const { cache, config } = deps;
   const fetchNormalized = async () => {
-    const raw = await downloadImage(input.url, { maxBytes: config.imageMaxBytes, timeoutMs: config.engineTimeoutMs, fetch: deps.fetch });
+    const raw = await downloadImage(input.url, { maxBytes: config.imageMaxBytes, timeoutMs: DOWNLOAD_TIMEOUT_MS, fetch: deps.fetch });
     return normalizeImage(raw, config.imageMaxPixels);
   };
 
@@ -26,7 +27,10 @@ export async function loadImage(
       url: input.url,
       sha256: known,
       jpeg() {
-        pending ??= fetchNormalized().then((n) => { loaded = n.jpeg.length; return n.jpeg; });
+        pending ??= fetchNormalized().then(
+          (n) => { loaded = n.jpeg.length; return n.jpeg; },
+          (e) => { pending = undefined; throw e; },
+        );
         return pending;
       },
       bytesInMemory: () => loaded,

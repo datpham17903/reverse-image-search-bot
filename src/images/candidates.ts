@@ -25,10 +25,12 @@ export function extractCandidates(msg: { attachments: AttachmentLike[]; embeds: 
     const size = a.width && a.height ? ` · ${a.width}×${a.height}` : "";
     out.push({ kind: "attachment", url: a.url, attachmentId: a.id, description: `${a.name}${size}` });
   }
+  const desc = (e: EmbedLike) => `ảnh xem trước của link ${hostOf(e.url)}`;
   for (const e of msg.embeds) {
-    const desc = `ảnh xem trước của link ${hostOf(e.url)}`;
-    if (e.image?.proxyURL) out.push({ kind: "embed_image", url: e.image.proxyURL, description: desc });
-    if (e.thumbnail?.proxyURL) out.push({ kind: "embed_thumbnail", url: e.thumbnail.proxyURL, description: desc });
+    if (e.image?.proxyURL) out.push({ kind: "embed_image", url: e.image.proxyURL, description: desc(e) });
+  }
+  for (const e of msg.embeds) {
+    if (e.thumbnail?.proxyURL) out.push({ kind: "embed_thumbnail", url: e.thumbnail.proxyURL, description: desc(e) });
   }
   return out.slice(0, MAX_CANDIDATES).map((c, i) => ({
     ...c,

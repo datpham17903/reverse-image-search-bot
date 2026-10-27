@@ -158,3 +158,37 @@ test("loadImage downloads, normalizes and stores attachment hash", async () => {
   assert.equal(cache.getAttachmentHash("att2"), sha);
   assert.ok(img.bytesInMemory() > 0);
 });
+
+test("candidates: all embed images come before all embed thumbnails", () => {
+  const e = (n: number) => ({ url: `https://h${n}.example/p`, image: { proxyURL: `https://media.discordapp.net/i${n}.png` }, thumbnail: { proxyURL: `https://media.discordapp.net/t${n}.png` } });
+  const c = extractCandidates({ attachments: [], embeds: [e(1), e(2)] });
+  assert.deepEqual(c.map(x => x.url.split("/").pop()), ["i1.png", "i2.png", "t1.png", "t2.png"]);
+});
+
+test("loadImage download timeout is 10 s", async () => {
+  const delays: unknown[] = [];
+  const orig = globalThis.setTimeout;
+  globalThis.setTimeout = ((fn: () => void, ms?: number) => { delays.push(ms); return orig(fn, ms); }) as typeof setTimeout;
+  try {
+    const cache = new ResultCache(openDb(":memory:"), fakeClock(0).now);
+    const png = await pngBuf();
+    await loadImage({ url: U }, { cache, config: testConfig({ engineTimeoutMs: 1234 }), now: () => 0, fetch: async () => new Response(new Uint8Array(png)) });
+  } finally {
+    globalThis.setTimeout = orig;
+  }
+  assert.ok(delays.includes(10_000));
+  assert.ok(!delays.includes(1234));
+});
+
+test("lazy loadImage retries after a failed jpeg()", async () => {
+  const clk = fakeClock(1000);
+  const cache = new ResultCache(openDb(":memory:"), clk.now);
+  cache.putAttachmentHash("att3", "h", 60_000);
+  const png = await pngBuf();
+  let calls = 0;
+  const f: typeof fetch = async () => { calls++; return calls === 1 ? new Response("", { status: 500 }) : new Response(new Uint8Array(png)); };
+  const img = await loadImage({ url: U, attachmentId: "att3" }, { cache, config: testConfig(), now: clk.now, fetch: f });
+  await assert.rejects(img.jpeg(), (e: unknown) => e instanceof ImageError && e.code === "fetch_failed");
+  assert.ok((await img.jpeg()).length > 0);
+  assert.equal(calls, 2);
+});
