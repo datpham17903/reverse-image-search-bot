@@ -16,7 +16,8 @@ function hostname(url: string): string {
 }
 
 function toSite(title: unknown, url: unknown, thumb: unknown): YandexSite | null {
-  if (typeof title !== "string" || typeof url !== "string" || !/^https?:\/\//i.test(url)) return null;
+  if (typeof title !== "string" || !title.trim() || typeof url !== "string" || !/^https?:\/\//i.test(url)) return null;
+  if (!hostname(url)) return null;
   const t = typeof thumb === "string" && /^(https?:)?\/\//i.test(thumb) ? thumb.replace(/^\/\//, "https://") : undefined;
   return { title, url, domain: hostname(url), ...(t ? { thumbnailUrl: t } : {}) };
 }
@@ -37,19 +38,23 @@ function sitesFromState(html: string): YandexSite[] | null {
   return null;
 }
 
-function sitesFromDom(html: string): YandexSite[] {
+function sitesFromDom(html: string): YandexSite[] | null {
   const out: YandexSite[] = [];
+  let anchors = 0;
   for (const m of html.matchAll(/<a\b[^>]*class="[^"]*CbirSites-ItemTitle[^"]*"[^>]*>[\s\S]*?<\/a>/g)) {
+    anchors++;
     const href = /href="([^"]*)"/.exec(m[0])?.[1];
     const title = unescapeHtml(m[0].replace(/<[^>]*>/g, "").trim());
     const site = toSite(title, href && unescapeHtml(href), undefined);
     if (site) out.push(site);
   }
-  return out;
+  return anchors > 0 ? out : null;
 }
 
 function extractSites(html: string): YandexSite[] {
-  return sitesFromState(html) ?? sitesFromDom(html);
+  const sites = sitesFromState(html) ?? sitesFromDom(html);
+  if (!sites) throw new YandexParseError("no sites container");
+  return sites;
 }
 
 export function parseYandexSites(html: string): YandexSite[] {

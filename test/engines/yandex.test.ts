@@ -32,6 +32,18 @@ test("recognized page without sites → []", () => {
   assert.deepEqual(parseYandexSites(fx("brightdata-sites-empty-synthetic.html")), []);
 });
 
+test("CbirSites text without recognizable structure → YandexParseError", () => {
+  assert.throws(() => parseYandexSites('<html><body><div class="CbirSites-Foo">x</div></body></html>'), YandexParseError);
+});
+
+test("sites with blank title or empty domain are skipped", () => {
+  const state = JSON.stringify({ sites: [
+    { title: "  ", url: "https://a.com/1" }, { title: "ok", url: "https://a.com/2" }, { title: "nohost", url: "https://" },
+  ] }).replace(/"/g, "&quot;");
+  assert.deepEqual(parseYandexSites(`<div class="CbirSites" data-state="${state}"></div>`),
+    [{ title: "ok", url: "https://a.com/2", domain: "a.com" }]);
+});
+
 test("captcha page → YandexParseError", () => {
   assert.throws(() => parseYandexSites(fx("captcha.html")), YandexParseError);
 });
@@ -74,16 +86,31 @@ test("brightdata parse failure → unavailable with parseFailed", async () => {
 });
 
 test("brightdata status mapping", async () => {
-  assert.equal((await run(respond("", 401))).status, "unavailable");
-  assert.equal((await run(respond("", 403))).status, "unavailable");
-  assert.equal((await run(respond("", 402))).status, "quota_exhausted");
-  assert.equal((await run(respond("", 429))).status, "rate_limited");
-  assert.equal((await run(respond("", 500))).status, "unavailable");
+  const cases: [number, string][] = [[401, "unavailable"], [403, "unavailable"], [402, "quota_exhausted"], [429, "rate_limited"], [500, "unavailable"]];
+  for (const [code, status] of cases) {
+    const res = await run(respond("", code));
+    assert.equal(res.status, status);
+    assert.equal(res.sent, true);
+  }
 });
 
 test("brightdata network failure never throws", async () => {
   const f = (async () => { throw new Error("boom"); }) as unknown as typeof fetch;
   assert.equal((await run(f)).status, "unavailable");
+});
+
+test("brightdata connection failure before send → sent false", async () => {
+  const f = (async () => { throw Object.assign(new Error("x"), { cause: { code: "ECONNREFUSED" } }); }) as unknown as typeof fetch;
+  const res = await run(f);
+  assert.equal(res.status, "unavailable");
+  assert.equal(res.sent, false);
+});
+
+test("brightdata abort → timeout", async () => {
+  const f = (async () => { throw Object.assign(new Error("a"), { name: "AbortError" }); }) as unknown as typeof fetch;
+  const res = await run(f);
+  assert.equal(res.status, "timeout");
+  assert.equal(res.sent, true);
 });
 
 test("engine routes each provider to its path", async () => {
