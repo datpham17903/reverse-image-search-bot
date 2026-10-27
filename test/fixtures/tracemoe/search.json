@@ -1,0 +1,26 @@
+{
+  "frameCount": 745506,
+  "error": "",
+  "result": [
+    {
+      "anilist": { "id": 99939, "title": { "native": "ネコぱらOVA", "romaji": "Nekopara OVA", "english": null }, "isAdult": false },
+      "filename": "Nekopara - OVA (BD 1280x720 x264 AAC).mp4",
+      "episode": null,
+      "from": 97.75,
+      "to": 98.92,
+      "similarity": 0.95440,
+      "video": "https://api.trace.moe/video/99939/video.mp4?t=1",
+      "image": "https://api.trace.moe/image/99939/image.jpg?t=1"
+    },
+    {
+      "anilist": { "id": 21, "title": { "native": "ワンピース", "romaji": "ONE PIECE", "english": "One Piece" }, "isAdult": false },
+      "filename": "One Piece 100.mkv",
+      "episode": 100,
+      "from": 754.5,
+      "to": 756,
+      "similarity": 0.87,
+      "video": "https://api.trace.moe/video/21/video.mp4?t=2",
+      "image": "https://api.trace.moe/image/21/image.jpg?t=2"
+    }
+  ]
+}
