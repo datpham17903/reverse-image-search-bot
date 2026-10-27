@@ -1,0 +1,20 @@
+{
+  "header": {
+    "user_id": "1", "account_type": "1", "short_limit": "6", "long_limit": "200",
+    "long_remaining": 195, "short_remaining": 5, "status": 0, "results_requested": 8, "search_depth": "128", "minimum_similarity": 52.6, "results_returned": 3
+  },
+  "results": [
+    {
+      "header": { "similarity": "93.12", "thumbnail": "https://img3.saucenao.com/pixiv.jpg", "index_id": 5, "index_name": "Index #5: Pixiv Images - 12345_p0.jpg", "dupes": 0, "hidden": 0 },
+      "data": { "ext_urls": ["https://www.pixiv.net/artworks/12345"], "title": "Blue Sky", "pixiv_id": 12345, "member_name": "Artist A", "member_id": 99 }
+    },
+    {
+      "header": { "similarity": "88.40", "thumbnail": "https://img3.saucenao.com/anime.jpg", "index_id": 21, "index_name": "Index #21: Anime - Show.mkv", "dupes": 0, "hidden": 0 },
+      "data": { "ext_urls": ["https://anidb.net/anime/4521"], "source": "Some Show", "part": "5", "year": "2010", "est_time": "02:13 / 24:00" }
+    },
+    {
+      "header": { "similarity": "75.00", "thumbnail": "https://img3.saucenao.com/h.jpg", "index_id": 22, "index_name": "Index #22: H-Anime", "dupes": 0, "hidden": 1 },
+      "data": { "ext_urls": ["https://example.org/h/1"], "source": "Hidden Show" }
+    }
+  ]
+}

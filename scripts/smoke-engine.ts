@@ -2,6 +2,7 @@ import { downloadImage } from "../src/images/download.ts";
 import { normalizeImage } from "../src/images/normalize.ts";
 import { classify } from "../src/search/tiers.ts";
 import { createTraceMoe } from "../src/engines/tracemoe.ts";
+import { createSauceNao } from "../src/engines/saucenao.ts";
 import type { Engine, ProviderId } from "../src/engines/types.ts";
 
 const TIMEOUT_MS = 15_000;
@@ -17,6 +18,11 @@ if (!engineName || !url) {
 function build(name: string): { engine: Engine; provider: ProviderId } {
   switch (name) {
     case "tracemoe": return { engine: createTraceMoe({ fetch }), provider: "tracemoe" };
+    case "saucenao": {
+      const apiKey = process.env.SAUCENAO_API_KEY;
+      if (!apiKey) throw new Error("SAUCENAO_API_KEY is required");
+      return { engine: createSauceNao({ fetch, apiKey }), provider: "saucenao" };
+    }
     default: throw new Error(`unknown engine: ${name}`);
   }
 }
