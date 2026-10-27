@@ -1,0 +1,59 @@
+import type { YandexSite } from "./types.ts";
+
+export class YandexParseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "YandexParseError";
+  }
+}
+
+// PROVISIONAL: written without a real Bright Data page. Rewrite extractSites once the real fixture exists.
+const ENTITIES: Record<string, string> = { "&quot;": '"', "&amp;": "&", "&#39;": "'", "&apos;": "'", "&lt;": "<", "&gt;": ">" };
+const unescapeHtml = (s: string) => s.replace(/&(quot|amp|#39|apos|lt|gt);/g, (m) => ENTITIES[m] ?? m);
+
+function hostname(url: string): string {
+  try { return new URL(url).hostname; } catch { return ""; }
+}
+
+function toSite(title: unknown, url: unknown, thumb: unknown): YandexSite | null {
+  if (typeof title !== "string" || typeof url !== "string" || !/^https?:\/\//i.test(url)) return null;
+  const t = typeof thumb === "string" && /^(https?:)?\/\//i.test(thumb) ? thumb.replace(/^\/\//, "https://") : undefined;
+  return { title, url, domain: hostname(url), ...(t ? { thumbnailUrl: t } : {}) };
+}
+
+function sitesFromState(html: string): YandexSite[] | null {
+  for (const m of html.matchAll(/data-state=(?:"([^"]*)"|'([^']*)')/g)) {
+    let state: unknown;
+    try { state = JSON.parse(unescapeHtml(m[1] ?? m[2] ?? "")); } catch { continue; }
+    const sites = (state as { sites?: unknown } | null)?.sites;
+    if (!Array.isArray(sites)) continue;
+    const out: YandexSite[] = [];
+    for (const s of sites as Record<string, any>[]) {
+      const site = toSite(s?.title, s?.url, s?.thumb?.url ?? s?.thumb);
+      if (site) out.push(site);
+    }
+    return out;
+  }
+  return null;
+}
+
+function sitesFromDom(html: string): YandexSite[] {
+  const out: YandexSite[] = [];
+  for (const m of html.matchAll(/<a\b[^>]*class="[^"]*CbirSites-ItemTitle[^"]*"[^>]*>[\s\S]*?<\/a>/g)) {
+    const href = /href="([^"]*)"/.exec(m[0])?.[1];
+    const title = unescapeHtml(m[0].replace(/<[^>]*>/g, "").trim());
+    const site = toSite(title, href && unescapeHtml(href), undefined);
+    if (site) out.push(site);
+  }
+  return out;
+}
+
+function extractSites(html: string): YandexSite[] {
+  return sitesFromState(html) ?? sitesFromDom(html);
+}
+
+export function parseYandexSites(html: string): YandexSite[] {
+  if (/showcaptcha|SmartCaptcha/i.test(html)) throw new YandexParseError("captcha page");
+  if (!html.includes("CbirSites")) throw new YandexParseError("unrecognized page");
+  return extractSites(html);
+}
