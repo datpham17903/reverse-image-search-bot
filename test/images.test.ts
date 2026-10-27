@@ -192,3 +192,26 @@ test("lazy loadImage retries after a failed jpeg()", async () => {
   assert.ok((await img.jpeg()).length > 0);
   assert.equal(calls, 2);
 });
+
+test("image decoding runs at most 2 at a time", async () => {
+  const png = await sharp({ create: { width: 3000, height: 3000, channels: 3, background: "#123456" } }).png().toBuffer();
+  const cache = new ResultCache(openDb(":memory:"), fakeClock(0).now);
+  const config = testConfig();
+  const orig = sharp.prototype.jpeg;
+  let inFlight = 0;
+  let peak = 0;
+  sharp.prototype.jpeg = function (this: InstanceType<typeof sharp>, ...a: unknown[]) {
+    const p = orig.apply(this, a as never) as InstanceType<typeof sharp>;
+    const toBuffer = p.toBuffer.bind(p) as (...x: unknown[]) => Promise<unknown>;
+    (p as unknown as { toBuffer: unknown }).toBuffer = async (...x: unknown[]) => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      try { return await toBuffer(...x); } finally { inFlight--; }
+    };
+    return p;
+  } as never;
+  try {
+    await Promise.all(Array.from({ length: 4 }, (_, i) =>
+      loadImage({ url: `https://cdn.discordapp.com/a/${i}.png` }, { cache, config, now: () => 0, fetch: async () => new Response(new Uint8Array(png)) })));
+  } finally { sharp.prototype.jpeg = orig; }
+  assert.ok(peak >= 1 && peak <= 2, `peak ${peak}`);
+});

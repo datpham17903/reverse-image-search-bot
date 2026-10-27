@@ -212,3 +212,60 @@ test("saucenao quota header is passed to gates", async () => {
   const out = await s.runner("saucenao", s.ctx({ image: img("other") }));
   assert.equal(out.status, "server_quota");
 });
+
+test("saucenao 429 header (short block) makes the next acquire busy", async () => {
+  const e = fakeEngine("saucenao", ["saucenao"], () => ({ status: "rate_limited", matches: [], sent: true, quota: { shortRemaining: 0 } }));
+  const s = setup(e);
+  const first = await s.runner("saucenao", s.ctx());
+  assert.equal(first.status, "rate_limited");
+  const out = await s.runner("saucenao", s.ctx({ image: img("other") }));
+  assert.equal(out.status, "busy");
+});
+
+test("engine failure is logged without urls or bodies", async () => {
+  const e = fakeEngine("danbooru", ["danbooru"], () => ({ status: "unavailable", matches: [], sent: true, parseFailed: true }));
+  const s = setup(e);
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (l: string) => { lines.push(l); };
+  try { await s.runner("danbooru", s.ctx()); } finally { console.log = orig; }
+  const rec = lines.map((l) => JSON.parse(l)).find((r) => r.event === "engine_failed");
+  assert.ok(rec);
+  assert.equal(rec.level, "warn");
+  assert.equal(rec.engine, "danbooru");
+  assert.equal(rec.provider, "danbooru");
+  assert.equal(rec.status, "unavailable");
+  assert.equal(rec.parseFailed, true);
+  assert.ok(!("url" in rec));
+});
+
+test("deadline reached while waiting for a slot does not call the engine", async () => {
+  const e = fakeEngine("danbooru", ["danbooru"], () => ok);
+  let released = 0;
+  const s = setup(e, { gates: (g) => ({
+    acquire: async () => { s.clock.advance(59_500); return { release: () => { released++; } }; },
+    budget: (p, pu) => g.budget(p, pu), noteSaucenaoHeader: (q) => g.noteSaucenaoHeader(q),
+    noteTraceMe: (m) => g.noteTraceMe(m), noteSerpapiAccount: (a) => g.noteSerpapiAccount(a), stats: () => g.stats(),
+  }) });
+  const out = await s.runner("danbooru", s.ctx());
+  assert.equal(out.status, "deadline");
+  assert.equal(e.calls.length, 0);
+  assert.equal(released, 1);
+  assert.equal(s.usage.count("danbooru", 0, ALL), 0);
+});
+
+test("budget exhausted between check and acquire moves on to the next provider", async () => {
+  const e = fakeEngine("yandex", ["brightdata", "serpapi"], () => ok);
+  let budgetCalls = 0;
+  let released = 0;
+  const s = setup(e, { gates: (g) => ({
+    acquire: async () => ({ release: () => { released++; } }),
+    budget: (p, pu) => (++budgetCalls === 2 ? "server_quota" : g.budget(p, pu)),
+    noteSaucenaoHeader: (q) => g.noteSaucenaoHeader(q),
+    noteTraceMe: (m) => g.noteTraceMe(m), noteSerpapiAccount: (a) => g.noteSerpapiAccount(a), stats: () => g.stats(),
+  }) });
+  const out = await s.runner("yandex", s.ctx());
+  assert.deepEqual(e.calls, ["serpapi"]);
+  assert.equal(out.status, "ok");
+  assert.equal(released, 2);
+});

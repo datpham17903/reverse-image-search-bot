@@ -17,11 +17,14 @@ const candidatesOf = (m: MessageLike) => extractCandidates({ attachments: [...m.
 const MODES: readonly string[] = ["auto", "anime", "art", "movie"];
 const selected = (i: MessageComponentInteraction) => (i as unknown as { values: string[] }).values[0]!;
 
-async function refetchCandidate(i: MessageComponentInteraction, channelId: string, messageId: string, index: number): Promise<ImageCandidate | undefined> {
+async function refetchCandidate(i: MessageComponentInteraction, channelId: string, messageId: string, original: ImageCandidate, all: ImageCandidate[]): Promise<ImageCandidate | undefined> {
   try {
     const channel = await i.client.channels.fetch(channelId);
     if (!channel || !channel.isTextBased()) return undefined;
-    return candidatesOf(await channel.messages.fetch(messageId))[index];
+    const fresh = candidatesOf(await channel.messages.fetch(messageId));
+    if (original.attachmentId) return fresh.find((c) => c.attachmentId === original.attachmentId);
+    const sameKind = (list: ImageCandidate[]) => list.filter((c) => c.kind === original.kind);
+    return sameKind(fresh)[sameKind(all).indexOf(original)];
   } catch (e) {
     log("warn", "refetch_failed", { error: e instanceof Error ? e.message : String(e) });
     return undefined;
@@ -50,7 +53,7 @@ async function routeComponent(i: MessageComponentInteraction, app: App): Promise
         defer: async () => {},
         edit: async (p) => { await i.editReply(p as never); },
       };
-      candidate = await refetchCandidate(i, pick.channelId, pick.messageId, index);
+      candidate = await refetchCandidate(i, pick.channelId, pick.messageId, candidate, pick.candidates);
       if (!candidate) return responder.edit(renderNotice(msg.imageFetch));
     }
     return startSearch({

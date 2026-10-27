@@ -1,9 +1,11 @@
 const HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
+// Discord's external-image proxy shards.
+const EXT_PROXY = /^images-ext-\d+\.discordapp\.net$/;
 
 export function isDiscordImageUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && HOSTS.has(u.hostname);
+    return u.protocol === "https:" && (HOSTS.has(u.hostname) || EXT_PROXY.test(u.hostname));
   } catch {
     return false;
   }

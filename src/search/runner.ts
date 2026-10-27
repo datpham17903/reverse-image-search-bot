@@ -1,3 +1,4 @@
+import { log } from "../log.ts";
 import type { Config } from "../config.ts";
 import type {
   CallPurpose, Engine, EngineId, EngineOutcome, EngineResponse, ImageSource, Match, Mode, OutcomeStatus, ProviderId,
@@ -50,10 +51,14 @@ export function createRunner(deps: {
         if (remaining < MIN_REMAINING_MS) return result("deadline");
         const acquired = await gates.acquire(provider, Math.min(MAX_ACQUIRE_WAIT_MS, remaining));
         if ("busy" in acquired) return result("busy");
+        if (gates.budget(provider, ctx.purpose) === "server_quota") {
+          acquired.release(); last = "server_quota"; continue;
+        }
+        remaining = ctx.deadlineAt - now();
+        if (remaining < MIN_REMAINING_MS) { acquired.release(); return result("deadline"); }
 
         let res: EngineResponse;
         try {
-          remaining = ctx.deadlineAt - now();
           const signal = AbortSignal.timeout(Math.max(1, Math.min(config.engineTimeoutMs, remaining)));
           res = await engine.search({ ...input, signal }, provider);
         } catch {
@@ -62,6 +67,9 @@ export function createRunner(deps: {
           acquired.release();
         }
 
+        if (res.status !== "ok" && res.status !== "no_match") {
+          log("warn", "engine_failed", { engine: engine.id, provider, status: res.status, parseFailed: res.parseFailed === true });
+        }
         const definitive = res.status === "ok" || res.status === "no_match";
         if (res.sent) {
           anySent = true;

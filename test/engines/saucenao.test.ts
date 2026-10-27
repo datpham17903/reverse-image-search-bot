@@ -86,12 +86,24 @@ test("returns header quota", async () => {
 test("429 with long_remaining 0 → quota_exhausted; otherwise rate_limited", async () => {
   const exhausted = await mk(respond(JSON.stringify({ header: { status: -2, long_remaining: 0, short_remaining: 3 } }), 429)).search(input(), "saucenao");
   assert.equal(exhausted.status, "quota_exhausted");
+  assert.deepEqual(exhausted.quota, { longRemaining: 0 });
   const daily = await mk(respond("Daily Search Limit Exceeded.", 429)).search(input(), "saucenao");
   assert.equal(daily.status, "quota_exhausted");
+  assert.deepEqual(daily.quota, { longRemaining: 0 });
   const limited = await mk(respond(JSON.stringify({ header: { status: -1, long_remaining: 100, short_remaining: 0 } }), 429)).search(input(), "saucenao");
   assert.equal(limited.status, "rate_limited");
+  assert.deepEqual(limited.quota, { shortRemaining: 0 });
   const plain = await mk(respond("slow down", 429)).search(input(), "saucenao");
   assert.equal(plain.status, "rate_limited");
+  assert.deepEqual(plain.quota, { shortRemaining: 0 });
+});
+
+test("a malformed result item is dropped, not the whole response", async () => {
+  const good = JSON.parse(search).results[0];
+  const body = JSON.stringify({ header: { status: 0 }, results: [{ header: { similarity: 5 }, data: {} }, good] });
+  const r = await mk(respond(body)).search(input(), "saucenao");
+  assert.equal(r.status, "ok");
+  assert.equal(r.matches.length, 1);
 });
 
 test("413 → invalid_input, header.status != 0 → unavailable, no results → no_match", async () => {

@@ -153,14 +153,16 @@ test("notice, image errors, help, quota", () => {
   assert.match(help, /Ảnh bạn tìm sẽ được gửi tới trace\.moe, SauceNAO, Danbooru và Yandex \(qua Bright Data hoặc SerpApi\)\./);
 
   const q = renderQuota([
-    { provider: "tracemoe", usedToday: 3, allowanceToday: 100, usedPeriod: 3, periodLimit: null, blocked: false },
+    { provider: "tracemoe", usedToday: 3, allowanceToday: null, usedPeriod: 3, periodLimit: 100, blocked: false },
     { provider: "brightdata", usedToday: 1, allowanceToday: null, usedPeriod: 9, periodLimit: 500, blocked: false },
-    { provider: "saucenao", usedToday: 1, allowanceToday: 10, usedPeriod: 9, periodLimit: 100, blocked: true },
+    { provider: "saucenao", usedToday: 1, allowanceToday: null, usedPeriod: 1, periodLimit: null, remaining: 40, blocked: true },
+    { provider: "danbooru", usedToday: 2, allowanceToday: null, usedPeriod: 2, periodLimit: null, blocked: false },
   ], { brightdata: { healthy: false } }).embeds[0].description!;
   const lines = q.split("\n");
-  assert.equal(lines[0], "**trace.moe** · 24 giờ 3/100 · tháng 3/– · bình thường");
+  assert.equal(lines[0], "**trace.moe** · 24 giờ 3/100 · bình thường");
   assert.equal(lines[1], "**Bright Data** · hôm nay 1/– · tháng 9/500 · đang tạm chuyển sang SerpApi");
-  assert.equal(lines[2], "**SauceNAO** · hôm nay 1/10 · tháng 9/100 · hết lượt");
+  assert.equal(lines[2], "**SauceNAO** · hôm nay 1 · còn 40 · hết lượt");
+  assert.equal(lines[3], "**Danbooru** · hôm nay 2 · bình thường");
 });
 
 test("pick menu caps 25 and 100-char labels", () => {

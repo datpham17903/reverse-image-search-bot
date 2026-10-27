@@ -8,8 +8,8 @@ import { getSerpApiAccount } from "./yandex/serpapi.ts";
 
 export function createEngines(config: Config, f: typeof fetch): {
   engines: Record<EngineId, Engine>;
-  traceMe(): Promise<{ quota: number; quotaUsed: number }>;
-  serpapiAccount(): Promise<{ totalSearchesLeft: number; thisMonthUsage: number }>;
+  traceMe(signal?: AbortSignal): Promise<{ quota: number; quotaUsed: number }>;
+  serpapiAccount(signal?: AbortSignal): Promise<{ totalSearchesLeft: number; thisMonthUsage: number }>;
 } {
   const tracemoe = createTraceMoe({ fetch: f });
   return {
@@ -19,7 +19,7 @@ export function createEngines(config: Config, f: typeof fetch): {
       danbooru: createDanbooru({ fetch: f, login: config.danbooruLogin, apiKey: config.danbooruApiKey, userId: config.danbooruUserId }),
       yandex: createYandex({ fetch: f, brightdataApiKey: config.brightdataApiKey, brightdataZone: config.brightdataZone, serpapiApiKey: config.serpapiApiKey }),
     },
-    traceMe: () => tracemoe.getMe(),
-    serpapiAccount: () => getSerpApiAccount({ fetch: f, apiKey: config.serpapiApiKey }),
+    traceMe: (signal) => tracemoe.getMe(signal),
+    serpapiAccount: (signal) => getSerpApiAccount({ fetch: f, apiKey: config.serpapiApiKey, ...(signal ? { signal } : {}) }),
   };
 }

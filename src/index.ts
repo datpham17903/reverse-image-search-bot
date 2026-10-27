@@ -28,8 +28,8 @@ const db = openDb(config.sqlitePath);
 const { engines, traceMe, serpapiAccount } = createEngines(config, fetch);
 const app = createApp({ config, db, engines });
 
-const syncTrace = () => traceMe().then((me) => app.gates.noteTraceMe(me)).catch((e) => log("warn", "trace_sync_failed", { error: errMsg(e) }));
-const syncSerpapi = () => serpapiAccount().then((a) => app.gates.noteSerpapiAccount(a)).catch((e) => log("warn", "serpapi_sync_failed", { error: errMsg(e) }));
+const syncTrace = () => traceMe(AbortSignal.timeout(10_000)).then((me) => app.gates.noteTraceMe(me)).catch((e) => log("warn", "trace_sync_failed", { error: errMsg(e) }));
+const syncSerpapi = () => serpapiAccount(AbortSignal.timeout(10_000)).then((a) => app.gates.noteSerpapiAccount(a)).catch((e) => log("warn", "serpapi_sync_failed", { error: errMsg(e) }));
 await Promise.all([syncTrace(), syncSerpapi()]);
 
 await registerCommands(config);

@@ -21,6 +21,9 @@ test("newCode", () => assert.match(newCode(), /^[ABCDEFGHJKLMNPQRSTUVWXYZ2345678
 test("isDiscordImageUrl allows only https Discord hosts", () => {
   assert.ok(isDiscordImageUrl("https://cdn.discordapp.com/attachments/1/2/a.png?ex=1&is=2&hm=3"));
   assert.ok(isDiscordImageUrl("https://media.discordapp.net/external/abc/https/x.com/a.png"));
+  assert.ok(isDiscordImageUrl("https://images-ext-1.discordapp.net/external/abc/https/x.com/a.png"));
+  assert.ok(!isDiscordImageUrl("https://images-ext-1.discordapp.net.evil.com/a.png"));
+  assert.ok(!isDiscordImageUrl("https://images-ext-x.discordapp.net/a.png"));
   assert.ok(!isDiscordImageUrl("http://cdn.discordapp.com/a.png"));
   assert.ok(!isDiscordImageUrl("https://cdn.discordapp.com.evil.com/a.png"));
   assert.ok(!isDiscordImageUrl("https://169.254.169.254/latest/meta-data"));

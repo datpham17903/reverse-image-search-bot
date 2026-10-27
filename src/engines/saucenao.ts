@@ -17,29 +17,30 @@ const headerSchema = z.object({
 });
 const bodySchema = z.object({
   header: headerSchema,
-  results: z.array(z.object({
-    header: z.object({
-      similarity: z.string(),
-      thumbnail: z.string().optional(),
-      index_id: z.number(),
-      index_name: z.string(),
-      hidden: z.number().optional(),
-    }),
-    data: z.object({
-      ext_urls: z.array(z.string()).optional(),
-      title: text.optional(),
-      source: text.optional(),
-      material: text.optional(),
-      member_name: text.optional(),
-      creator: text.optional(),
-      author_name: text.optional(),
-      part: text.optional(),
-      est_time: text.optional(),
-    }),
-  })).default([]),
+  results: z.array(z.unknown()).default([]),
+});
+const itemSchema = z.object({
+  header: z.object({
+    similarity: z.string(),
+    thumbnail: z.string().optional(),
+    index_id: z.number(),
+    index_name: z.string(),
+    hidden: z.number().optional(),
+  }),
+  data: z.object({
+    ext_urls: z.array(z.string()).optional(),
+    title: text.optional(),
+    source: text.optional(),
+    material: text.optional(),
+    member_name: text.optional(),
+    creator: text.optional(),
+    author_name: text.optional(),
+    part: text.optional(),
+    est_time: text.optional(),
+  }),
 });
 
-type Item = z.infer<typeof bodySchema>["results"][number];
+type Item = z.infer<typeof itemSchema>;
 
 function hostname(url: string): string | undefined {
   try { return new URL(url).hostname; } catch { return undefined; }
@@ -78,7 +79,7 @@ function quotaOf(h: z.infer<typeof headerSchema>): EngineResponse["quota"] | und
   };
 }
 
-async function rateLimitStatus(res: Response): Promise<EngineResponse["status"]> {
+async function rateLimitResponse(res: Response): Promise<EngineResponse> {
   let raw = "";
   try { raw = await res.text(); } catch { /* body unreadable: treat as plain rate limit */ }
   let longRemaining: number | undefined;
@@ -86,7 +87,10 @@ async function rateLimitStatus(res: Response): Promise<EngineResponse["status"]>
     const parsed = z.object({ header: headerSchema.partial() }).safeParse(JSON.parse(raw));
     if (parsed.success) longRemaining = parsed.data.header.long_remaining;
   } catch { /* not JSON */ }
-  return longRemaining === 0 || /daily/i.test(raw) ? "quota_exhausted" : "rate_limited";
+  // Zero remaining makes the gates engage the 1 h / 30 s block.
+  return longRemaining === 0 || /daily/i.test(raw)
+    ? fail("quota_exhausted", true, { quota: { longRemaining: 0 } })
+    : fail("rate_limited", true, { quota: { shortRemaining: 0 } });
 }
 
 export function createSauceNao(deps: { fetch: typeof fetch; apiKey: string }): Engine {
@@ -113,7 +117,7 @@ export function createSauceNao(deps: { fetch: typeof fetch; apiKey: string }): E
       form.append("file", new Blob([new Uint8Array(jpeg)], { type: "image/jpeg" }), "image.jpg");
       try {
         const res = await sendRequest(deps.fetch, `${SEARCH_URL}?${params}`, { method: "POST", body: form, signal: input.signal });
-        if (res.status === 429) return fail(await rateLimitStatus(res), true);
+        if (res.status === 429) return await rateLimitResponse(res);
         if (res.status === 413) { await res.body?.cancel(); return fail("invalid_input", true); }
         if (res.status !== 200) { await res.body?.cancel(); return fail("unavailable", true); }
         const parsed = bodySchema.safeParse(await res.json());
@@ -122,6 +126,7 @@ export function createSauceNao(deps: { fetch: typeof fetch; apiKey: string }): E
         const extra = quota ? { quota } : {};
         if (parsed.data.header.status !== 0) return fail("unavailable", true, extra);
         const matches = parsed.data.results
+          .flatMap((r) => { const it = itemSchema.safeParse(r); return it.success ? [it.data] : []; })
           .filter(it => input.nsfwChannel || !it.header.hidden)
           .map(toMatch)
           .filter((m): m is Match => m !== null);

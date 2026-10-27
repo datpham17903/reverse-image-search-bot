@@ -196,8 +196,13 @@ export function renderQuota(stats: ProviderStats[], health: Record<string, { hea
     const status = s.blocked ? "hết lượt"
       : s.provider === "brightdata" && health[s.provider]?.healthy === false ? "đang tạm chuyển sang SerpApi"
       : "bình thường";
-    const today = s.provider === "tracemoe" ? "24 giờ" : "hôm nay";
-    return `**${PROVIDER_LABEL[s.provider]}** · ${today} ${s.usedToday}/${s.allowanceToday ?? "–"} · tháng ${s.usedPeriod}/${s.periodLimit ?? "–"} · ${status}`;
+    const label = `**${PROVIDER_LABEL[s.provider]}**`;
+    if (s.provider === "tracemoe") return `${label} · 24 giờ ${s.usedPeriod}/${s.periodLimit ?? "–"} · ${status}`;
+    if (s.provider === "saucenao" || s.provider === "danbooru") {
+      const left = s.remaining !== undefined ? ` · còn ${s.remaining}` : "";
+      return `${label} · hôm nay ${s.usedToday}${left} · ${status}`;
+    }
+    return `${label} · hôm nay ${s.usedToday}/${s.allowanceToday ?? "–"} · tháng ${s.usedPeriod}/${s.periodLimit ?? "–"} · ${status}`;
   });
   return payload([{ description: lines.join("\n") }]);
 }

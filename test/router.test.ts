@@ -213,3 +213,31 @@ test("a throwing handler answers with the generic notice", async () => {
   await route(g.i, app);
   assert.equal(g.calls[0]!.method, "editReply");
 });
+
+test("pick refetch searches the matching image, or reports imageFetch when it is gone", async () => {
+  const oldUrl = "https://cdn.discordapp.com/2.png?ex=1&is=2&hm=3";
+  const newUrl = "https://cdn.discordapp.com/2.png?ex=ffffffffff&is=2&hm=4";
+  const run = async (attachments: [string, string][]) => {
+    const { app, loaded } = makeApp();
+    app.picks.set("PICK4", {
+      ownerId: "u1", guildId: "g", channelId: "c", messageId: "m", nsfwChannel: false, sizeBytes: 10,
+      candidates: [
+        { kind: "attachment", url: "https://cdn.discordapp.com/1.png", attachmentId: "1", label: "Ảnh 1", description: "d" },
+        { kind: "attachment", url: oldUrl, attachmentId: "2", label: "Ảnh 2", description: "d" },
+      ],
+    });
+    const f = fake({
+      isMessageComponent: () => true, customId: "p:PICK4", values: ["1"],
+      client: { channels: { fetch: async () => ({ isTextBased: () => true, messages: { fetch: async (mid: string) => ({
+        id: mid, attachments: new Map(attachments.map(([id, u]) => [id, att(id, u)])), embeds: [],
+      }) } }) } },
+    });
+    await route(f.i, app);
+    return { loaded, f };
+  };
+  const moved = await run([["2", newUrl]]);
+  assert.deepEqual(moved.loaded, [newUrl]);
+  const gone = await run([["9", "https://cdn.discordapp.com/9.png?ex=ffffffffff&is=2&hm=4"]]);
+  assert.deepEqual(gone.loaded, []);
+  assert.ok(text(gone.f.calls.at(-1)!).includes(msg.imageFetch));
+});
