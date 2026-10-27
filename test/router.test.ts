@@ -116,3 +116,100 @@ test("/quota without Manage Server is refused", async () => {
   assert.equal(asked, PermissionFlagsBits.ManageGuild);
   assert.ok(!text(ok.calls[0]!).includes(msg.adminOnly));
 });
+
+const pickApp = (app: App, owner = "u1") => app.picks.set("PICK2", {
+  ownerId: owner, guildId: "g", channelId: "c", messageId: "m", nsfwChannel: false, sizeBytes: 10,
+  candidates: [{ kind: "attachment", url: "https://cdn.discordapp.com/1.png", attachmentId: "1", label: "Ảnh 1", description: "d" }],
+});
+
+test("pick refetch acks with deferUpdate before fetching the message", async () => {
+  const { app } = makeApp();
+  app.picks.set("PICK3", {
+    ownerId: "u1", guildId: "g", channelId: "c", messageId: "m", nsfwChannel: false, sizeBytes: 10,
+    candidates: [{ kind: "attachment", url: "https://cdn.discordapp.com/1.png?ex=1&is=2&hm=3", attachmentId: "1", label: "Ảnh 1", description: "d" }],
+  });
+  let f: ReturnType<typeof fake>;
+  f = fake({
+    isMessageComponent: () => true, customId: "p:PICK3", values: ["0"],
+    client: { channels: { fetch: async () => ({ isTextBased: () => true, messages: { fetch: async () => {
+      f.calls.push({ method: "messages.fetch", arg: undefined });
+      throw new Error("gone");
+    } } }) } },
+  });
+  await route(f.i, app);
+  assert.deepEqual(f.calls.map((c) => c.method), ["deferUpdate", "messages.fetch", "editReply"]);
+  assert.ok(text(f.calls[2]!).includes(msg.imageFetch));
+});
+
+test("pick by a non-owner is refused with no side effects", async () => {
+  const { app, loaded, searched } = makeApp();
+  pickApp(app, "u1");
+  const f = fake({ isMessageComponent: () => true, customId: "p:PICK2", values: ["0"], user: { id: "u2" } });
+  await route(f.i, app);
+  assert.equal(f.calls.length, 1);
+  assert.ok(text(f.calls[0]!).includes(msg.notOwner));
+  assert.deepEqual(loaded, []);
+  assert.equal(searched(), 0);
+});
+
+test("context menu with exactly one image starts an ephemeral auto search", async () => {
+  const { app, loaded } = makeApp();
+  const url = "https://cdn.discordapp.com/1.png";
+  const f = fake({ isMessageContextMenuCommand: () => true, targetMessage: { id: "m", attachments: new Map([["1", att("1", url)]]), embeds: [] } });
+  await route(f.i, app);
+  assert.equal(f.calls[0]!.method, "deferReply");
+  assert.notEqual(f.calls[0]!.arg.flags, undefined);
+  assert.deepEqual(loaded, [url]);
+});
+
+test("mode button updates with the mode select", async () => {
+  const { app } = makeApp();
+  session(app, "ABC", "u1");
+  const f = fake({ isMessageComponent: () => true, customId: "m:ABC" });
+  await route(f.i, app);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0]!.method, "update");
+  assert.ok(f.calls[0]!.arg.components[0].components[0].custom_id.startsWith("ms:ABC"));
+});
+
+test("mode select re-searches with the chosen mode and session image", async () => {
+  const { app, loaded, searched } = makeApp();
+  session(app, "ABC", "u1");
+  const f = fake({ isMessageComponent: () => true, customId: "ms:ABC", values: ["anime"] });
+  await route(f.i, app);
+  assert.equal(f.calls[0]!.method, "deferUpdate");
+  assert.deepEqual(loaded, []);
+  assert.ok(searched() > 0);
+  assert.equal(f.calls.at(-1)!.method, "editReply");
+});
+
+test("invalid mode value is rejected without searching", async () => {
+  const { app, searched } = makeApp();
+  session(app, "ABC", "u1");
+  const f = fake({ isMessageComponent: () => true, customId: "ms:ABC", values: ["bogus"] });
+  await route(f.i, app);
+  assert.equal(searched(), 0);
+  assert.equal(f.calls[0]!.method, "reply");
+});
+
+test("yandex button goes through startExtraYandex", async () => {
+  const { app } = makeApp();
+  session(app, "ABC", "u1");
+  const f = fake({ isMessageComponent: () => true, customId: "y:ABC" });
+  await route(f.i, app);
+  assert.equal(f.calls[0]!.method, "deferUpdate");
+});
+
+test("a throwing handler answers with the generic notice", async () => {
+  const { app } = makeApp();
+  app.gates.stats = () => { throw new Error("boom"); };
+  const f = fake({ isChatInputCommand: () => true, commandName: "quota", memberPermissions: { has: () => true } });
+  await route(f.i, app);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0]!.method, "reply");
+  assert.ok(text(f.calls[0]!).includes(msg.genericError));
+
+  const g = fake({ isChatInputCommand: () => true, commandName: "quota", memberPermissions: { has: () => true }, deferred: true });
+  await route(g.i, app);
+  assert.equal(g.calls[0]!.method, "editReply");
+});

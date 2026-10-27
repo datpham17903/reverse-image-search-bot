@@ -1,4 +1,4 @@
-import { PermissionFlagsBits, type Interaction, type MessageComponentInteraction } from "discord.js";
+import { MessageFlags, PermissionFlagsBits, type Interaction, type MessageComponentInteraction } from "discord.js";
 import type { App } from "../app.ts";
 import type { Mode } from "../engines/types.ts";
 import { extractCandidates, type ImageCandidate } from "../images/candidates.ts";
@@ -10,10 +10,11 @@ import { msg } from "./messages.ts";
 import { isNsfw } from "./nsfw.ts";
 import { renderHelp, renderModeSelect, renderNotice, renderPickMenu, renderQuota } from "./render.ts";
 import { commandResponder, updateResponder } from "./responders.ts";
-import { startExtraYandex, startSearch } from "./start-search.ts";
+import { startExtraYandex, startSearch, type Responder } from "./start-search.ts";
 
 type MessageLike = { attachments: Map<string, any>; embeds: any[] };
 const candidatesOf = (m: MessageLike) => extractCandidates({ attachments: [...m.attachments.values()], embeds: m.embeds });
+const MODES: readonly string[] = ["auto", "anime", "art", "movie"];
 const selected = (i: MessageComponentInteraction) => (i as unknown as { values: string[] }).values[0]!;
 
 async function refetchCandidate(i: MessageComponentInteraction, channelId: string, messageId: string, index: number): Promise<ImageCandidate | undefined> {
@@ -21,7 +22,8 @@ async function refetchCandidate(i: MessageComponentInteraction, channelId: strin
     const channel = await i.client.channels.fetch(channelId);
     if (!channel || !channel.isTextBased()) return undefined;
     return candidatesOf(await channel.messages.fetch(messageId))[index];
-  } catch {
+  } catch (e) {
+    log("warn", "refetch_failed", { error: e instanceof Error ? e.message : String(e) });
     return undefined;
   }
 }
@@ -40,14 +42,21 @@ async function routeComponent(i: MessageComponentInteraction, app: App): Promise
     let candidate: ImageCandidate | undefined = pick.candidates[index];
     if (!candidate) return r.replyEphemeral(renderNotice(msg.sessionExpired));
     const expires = signedUrlExpiresAt(candidate.url);
+    let responder: Responder = updateResponder(i);
     if (expires !== null && expires <= app.now()) {
+      await i.deferUpdate();
+      responder = {
+        replyEphemeral: async (p) => { await i.followUp({ ...p, flags: MessageFlags.Ephemeral } as never); },
+        defer: async () => {},
+        edit: async (p) => { await i.editReply(p as never); },
+      };
       candidate = await refetchCandidate(i, pick.channelId, pick.messageId, index);
-      if (!candidate) return r.replyEphemeral(renderNotice(msg.imageFetch));
+      if (!candidate) return responder.edit(renderNotice(msg.imageFetch));
     }
     return startSearch({
       userId, guildId: pick.guildId, nsfwChannel: pick.nsfwChannel, ephemeral: true, mode: "auto",
       image: { url: candidate.url, attachmentId: candidate.attachmentId },
-    }, updateResponder(i), app);
+    }, responder, app);
   }
 
   const session = app.sessions.get(ref.key);
@@ -57,17 +66,20 @@ async function routeComponent(i: MessageComponentInteraction, app: App): Promise
     case "mode":
       await i.update({ components: renderModeSelect(ref.key, session.outcome.mode) as never });
       return;
-    case "modeSelect":
+    case "modeSelect": {
+      const mode = selected(i);
+      if (!MODES.includes(mode)) return r.replyEphemeral(renderNotice(msg.sessionExpired));
       return startSearch({
         userId, guildId: session.guildId, nsfwChannel: session.nsfwChannel, ephemeral: session.ephemeral,
-        mode: selected(i) as Mode, image: session.image,
+        mode: mode as Mode, image: session.image,
       }, updateResponder(i), app);
+    }
     case "yandex":
       return startExtraYandex(ref.key, userId, updateResponder(i), app);
   }
 }
 
-export async function route(i: Interaction, app: App): Promise<void> {
+async function routeInner(i: Interaction, app: App): Promise<void> {
   if (i.isChatInputCommand()) {
     const r = commandResponder(i);
     switch (i.commandName) {
@@ -108,11 +120,21 @@ export async function route(i: Interaction, app: App): Promise<void> {
     });
     return r.replyEphemeral(renderPickMenu(pickId, candidates));
   }
-  if (i.isMessageComponent()) {
+  if (i.isMessageComponent()) await routeComponent(i, app);
+}
+
+export async function route(i: Interaction, app: App): Promise<void> {
+  try {
+    await routeInner(i, app);
+  } catch (e) {
+    log("error", "error", { flow: "route", error: e instanceof Error ? e.message : String(e) });
     try {
-      await routeComponent(i, app);
-    } catch (e) {
-      log("error", "error", { flow: "component", error: e instanceof Error ? e.message : String(e) });
+      const x = i as unknown as { deferred: boolean; replied: boolean; reply(p: unknown): Promise<unknown>; editReply(p: unknown): Promise<unknown> };
+      const p = renderNotice(msg.genericError);
+      if (x.deferred || x.replied) await x.editReply(p);
+      else await x.reply({ ...p, flags: MessageFlags.Ephemeral });
+    } catch (e2) {
+      log("warn", "error_reply_failed", { error: e2 instanceof Error ? e2.message : String(e2) });
     }
   }
 }

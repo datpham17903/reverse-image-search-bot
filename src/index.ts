@@ -50,12 +50,20 @@ setInterval(() => {
   }
 }, HOUR_MS).unref();
 
+let shuttingDown = false;
 async function shutdown(): Promise<void> {
-  app.jobs.stopAccepting();
-  await app.jobs.drain(config.jobDeadlineMs);
-  await client.destroy();
-  db.close();
-  process.exit(0);
+  if (shuttingDown) return;
+  shuttingDown = true;
+  try {
+    app.jobs.stopAccepting();
+    await app.jobs.drain(config.jobDeadlineMs);
+    await client.destroy();
+    db.close();
+    process.exit(0);
+  } catch (e) {
+    log("error", "shutdown_failed", { error: errMsg(e) });
+    process.exit(1);
+  }
 }
 process.on("SIGTERM", () => { void shutdown(); });
 process.on("SIGINT", () => { void shutdown(); });
