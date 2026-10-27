@@ -133,3 +133,64 @@ test("startExtraYandex refuses when Yandex is unavailable", async () => {
   await startExtraYandex("NOPE22", "u1", missing.r, app);
   assert.match(JSON.stringify(missing.calls[0].payload), /Phiên đã hết/);
 });
+
+test("startExtraYandex rejects a user who does not own the session", async () => {
+  const app = makeApp();
+  const res = responder();
+  await startSearch(params("u1"), res.r, app);
+  const code = /Mã: ([A-Z0-9]{6})/.exec(JSON.stringify(res.last()))![1];
+  const other = responder();
+  await startExtraYandex(code, "u2", other.r, app);
+  assert.deepEqual(other.calls.map((c) => c.kind), ["reply"]);
+  assert.match(JSON.stringify(other.calls[0].payload), /Chỉ người tìm/);
+  assert.equal(app.jobs.active, 0);
+});
+
+test("startExtraYandex answers with the restarting notice while stopping", async () => {
+  const app = makeApp();
+  const res = responder();
+  await startSearch(params("u1"), res.r, app);
+  const code = /Mã: ([A-Z0-9]{6})/.exec(JSON.stringify(res.last()))![1];
+  app.jobs.stopAccepting();
+  const extra = responder();
+  await startExtraYandex(code, "u1", extra.r, app);
+  assert.deepEqual(extra.calls.map((c) => c.kind), ["reply"]);
+  assert.match(JSON.stringify(extra.calls[0].payload), /khởi động lại/);
+});
+
+test("a throwing defer does not leak the job slot or the user", async () => {
+  const app = makeApp();
+  const res = responder();
+  const r: Responder = { ...res.r, async defer() { throw new Error("boom"); } };
+  await startSearch(params("u1"), r, app);
+  assert.equal(app.jobs.active, 0);
+  assert.equal(app.userLimits.checkStart("u1", "extra").ok, true);
+});
+
+test("a failing final edit keeps the result and is not replaced by the generic error", async () => {
+  const app = makeApp();
+  const res = responder();
+  const r: Responder = { ...res.r, async edit(p) {
+    if (JSON.stringify(p).includes("Mã: ")) throw new Error("discord down");
+    await res.r.edit(p);
+  } };
+  await startSearch(params("u1"), r, app);
+  assert.ok(!res.calls.some((c) => JSON.stringify(c.payload ?? "").includes("Có lỗi khi tìm")));
+  assert.equal(app.jobs.active, 0);
+});
+
+test("cleanup runs when runSearch throws unexpectedly", async () => {
+  const clock = fakeClock(1_000_000);
+  const app = makeApp({ now: clock.now });
+  const good = app.runner;
+  app.runner = async () => { throw new Error("unexpected"); };
+  const res = responder();
+  await startSearch(params("u1"), res.r, app);
+  assert.match(JSON.stringify(res.last()), /Có lỗi khi tìm/);
+  assert.equal(app.jobs.active, 0);
+  app.runner = good;
+  clock.advance(60_000);
+  const again = responder();
+  await startSearch(params("u1"), again.r, app);
+  assert.match(JSON.stringify(again.last()), /Mã: /);
+});

@@ -69,9 +69,9 @@ export async function startSearch(p: StartSearchParams, r: Responder, app: App):
   }
   if (!app.jobs.tryStart()) return r.replyEphemeral(renderNotice(msg.busy, links));
 
-  app.userLimits.begin(userId, "search");
   try {
     await r.defer(p.ephemeral);
+    app.userLimits.begin(userId, "search");
     let image: LoadedImage;
     if (isLoaded(p.image)) image = p.image;
     else {
@@ -93,7 +93,7 @@ export async function startSearch(p: StartSearchParams, r: Responder, app: App):
       code, ownerId: userId, guildId: p.guildId, nsfwChannel: p.nsfwChannel, ephemeral: p.ephemeral,
       image, outcome, sizeBytes: image.bytesInMemory(),
     });
-    await r.edit(outcomePayload(app, userId, p.nsfwChannel, image, outcome));
+    await safeEdit(r, outcomePayload(app, userId, p.nsfwChannel, image, outcome));
     logSearchDone(outcome, p.nsfwChannel, app.now() - receivedAt);
   } catch (e) {
     log("error", "error", { flow: "search", error: e instanceof Error ? e.message : String(e) });
@@ -105,8 +105,10 @@ export async function startSearch(p: StartSearchParams, r: Responder, app: App):
 }
 
 export async function startExtraYandex(code: string, userId: string, r: Responder, app: App): Promise<void> {
+  if (app.jobs.stopping) return r.replyEphemeral(renderNotice(msg.restarting));
   const session = app.sessions.get(code);
   if (!session) return r.replyEphemeral(renderNotice(msg.sessionExpired));
+  if (session.ownerId !== userId) return r.replyEphemeral(renderNotice(msg.notOwner));
   const check = app.userLimits.checkStart(userId, "extra");
   if (!check.ok) return r.replyEphemeral(renderNotice(msg.active));
   if (!app.yandexAvailable(userId)) return r.replyEphemeral(renderNotice(msg.yandexUnavailable));
