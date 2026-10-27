@@ -1,0 +1,24 @@
+[
+  {
+    "post_id": 111,
+    "score": 96.5,
+    "post": {
+      "id": 111,
+      "source": "https://www.pixiv.net/artworks/12345",
+      "rating": "g",
+      "tag_string_artist": "artist_one artist_two",
+      "preview_file_url": "https://cdn.donmai.us/preview/aa/bb/aabb.jpg"
+    }
+  },
+  {
+    "post_id": 222,
+    "score": 71,
+    "post": {
+      "id": 222,
+      "source": "file://local/image.png",
+      "rating": "e",
+      "tag_string_artist": "",
+      "preview_file_url": "https://cdn.donmai.us/preview/cc/dd/ccdd.jpg"
+    }
+  }
+]
