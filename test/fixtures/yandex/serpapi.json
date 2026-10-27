@@ -1,0 +1,7 @@
+{
+  "search_metadata": { "status": "Success" },
+  "image_results": [
+    { "position": 1, "title": "Example artwork", "link": "https://www.example.com/post/1", "source": "Example", "thumbnail": "https://serpapi.com/thumb/1.jpg" },
+    { "position": 2, "title": "Another page", "link": "https://other.example.org/a", "source": "Other" }
+  ]
+}
