@@ -58,12 +58,19 @@ export class ProviderGates implements Gates {
 
   async acquire(provider: ProviderId, waitMs: number): Promise<Acquired> {
     const window = this.windows[provider];
-    const shortBlock = provider === "saucenao" ? Math.max(0, this.saucenaoShortUntil - this.now()) : 0;
-    const wait = Math.max(window?.msUntilFree() ?? 0, shortBlock);
-    if (wait > waitMs) return { busy: true };
-    if (wait > 0) await this.sleep(wait);
-    const release = await this.semaphores[provider].acquire(waitMs - wait);
+    const deadline = this.now() + waitMs;
+    const release = await this.semaphores[provider].acquire(waitMs);
     if (!release) return { busy: true };
+    for (;;) {
+      const shortBlock = provider === "saucenao" ? Math.max(0, this.saucenaoShortUntil - this.now()) : 0;
+      const wait = Math.max(window?.msUntilFree() ?? 0, shortBlock);
+      if (wait <= 0) break;
+      if (wait > deadline - this.now()) {
+        release();
+        return { busy: true };
+      }
+      await this.sleep(wait);
+    }
     window?.record();
     return { release };
   }

@@ -104,3 +104,91 @@ test("stats lists all five providers", () => {
   const { gates } = setup();
   assert.deepEqual(gates.stats().map((s) => s.provider), ["tracemoe", "saucenao", "danbooru", "brightdata", "serpapi"]);
 });
+
+test("concurrent danbooru acquires keep the 1 s window", async () => {
+  const { clk, gates } = setup();
+  const t0 = clk.now();
+  const p1 = gates.acquire("danbooru", 1500);
+  const p2 = gates.acquire("danbooru", 1500);
+  const a = await p1;
+  assert.ok("release" in a);
+  a.release();
+  const b = await p2;
+  assert.ok("release" in b);
+  assert.ok(clk.now() - t0 >= 1000);
+});
+
+test("serpapi allows 50 calls per hour then reports busy", async () => {
+  const { gates } = setup();
+  for (let i = 0; i < 50; i++) {
+    const a = await gates.acquire("serpapi", 0);
+    assert.ok("release" in a);
+    a.release();
+  }
+  assert.deepEqual(await gates.acquire("serpapi", 10), { busy: true });
+});
+
+test("busy leaves no leaked slot or stamp", async () => {
+  const { gates } = setup();
+  const a = await gates.acquire("tracemoe", 0);
+  assert.ok("release" in a);
+  assert.deepEqual(await gates.acquire("tracemoe", 20), { busy: true });
+  a.release();
+  assert.ok("release" in (await gates.acquire("tracemoe", 0)));
+
+  const d = await gates.acquire("danbooru", 0);
+  assert.ok("release" in d);
+  assert.deepEqual(await gates.acquire("danbooru", 500), { busy: true }); // window 1000 > 500
+  d.release();
+  const d2 = await gates.acquire("danbooru", 1000); // would fail if busy leaked a slot
+  assert.ok("release" in d2);
+});
+
+test("busy after semaphore wait releases the slot and records no stamp", async () => {
+  const { clk, gates } = setup();
+  const a = await gates.acquire("danbooru", 0);
+  assert.ok("release" in a);
+  const p = gates.acquire("danbooru", 1500);
+  a.release();
+  const b = await p;
+  assert.ok("release" in b);
+  b.release();
+  clk.advance(10);
+  assert.deepEqual(await gates.acquire("danbooru", 100), { busy: true });
+  assert.ok("release" in (await gates.acquire("danbooru", 1000)));
+});
+
+test("concurrency caps: tracemoe 1, saucenao 2", async () => {
+  const { gates } = setup();
+  const t1 = await gates.acquire("tracemoe", 0);
+  assert.ok("release" in t1);
+  assert.deepEqual(await gates.acquire("tracemoe", 0), { busy: true });
+  const s1 = await gates.acquire("saucenao", 0);
+  const s2 = await gates.acquire("saucenao", 0);
+  assert.ok("release" in s1 && "release" in s2);
+  assert.deepEqual(await gates.acquire("saucenao", 0), { busy: true });
+});
+
+test("serpapi local count above snapshot wins", () => {
+  const { clk, usage, gates } = setup();
+  clk.advance(10 * DAY);
+  for (let i = 0; i < 200; i++) usage.record("serpapi", "primary", clk.now() - 5 * DAY);
+  gates.noteSerpapiAccount({ totalSearchesLeft: 200 }); // snapshot says 50 used
+  assert.equal(gates.stats().find((x) => x.provider === "serpapi")!.usedPeriod, 200);
+});
+
+test("serpapi adds calls recorded after the snapshot", () => {
+  const { clk, usage, gates } = setup();
+  clk.advance(10 * DAY);
+  gates.noteSerpapiAccount({ totalSearchesLeft: 100 }); // 150 used
+  clk.advance(1);
+  for (let i = 0; i < 7; i++) usage.record("serpapi", "primary", clk.now());
+  assert.equal(gates.stats().find((x) => x.provider === "serpapi")!.usedPeriod, 157);
+});
+
+test("trace unknown_check at 49 is still ok", () => {
+  const { clk, usage, gates } = setup();
+  gates.noteTraceMe({ quota: 100, quotaUsed: 0 });
+  for (let i = 0; i < 49; i++) usage.record("tracemoe", "unknown_check", clk.now());
+  assert.equal(gates.budget("tracemoe", "unknown_check"), "ok");
+});
