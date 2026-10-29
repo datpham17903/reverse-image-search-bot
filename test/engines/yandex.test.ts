@@ -115,7 +115,7 @@ test("brightdata abort → timeout", async () => {
 
 test("engine routes each provider to its path", async () => {
   const urls: string[] = [];
-  const f = (async (u: string) => { urls.push(u); return new Response(u.includes("brightdata") ? fx("brightdata-sites-synthetic.html") : fx("serpapi.json")); }) as unknown as typeof fetch;
+  const f = (async (u: string) => { urls.push(u); return new Response(u.includes("brightdata") || u.includes("yandex.com") ? fx("brightdata-sites-synthetic.html") : fx("serpapi.json")); }) as unknown as typeof fetch;
   const e = createYandex({ fetch: f, brightdataApiKey: "B", brightdataZone: "z", serpapiApiKey: "S" });
   assert.deepEqual(e.providers, ["brightdata", "serpapi"]);
   assert.equal(e.version, 1);
@@ -123,6 +123,23 @@ test("engine routes each provider to its path", async () => {
   const input = { image: { url: "https://x/y.png", sha256: "h", jpeg: async () => Buffer.alloc(0) }, mode: "auto" as const, nsfwChannel: false, signal: new AbortController().signal };
   assert.equal((await e.search(input, "brightdata")).status, "ok");
   assert.equal((await e.search(input, "serpapi")).status, "ok");
+  assert.equal((await e.search(input, "yandex_direct")).status, "ok");
   assert.ok(urls[0]!.startsWith("https://api.brightdata.com/request"));
   assert.ok(urls[1]!.startsWith("https://serpapi.com/search.json"));
+  assert.ok(urls[2]!.startsWith("https://yandex.com/images/search?rpt=imageview&cbir_page=sites&family=no&url="));
+});
+
+test("parses sites from initialState.cbirSites (live Yandex format)", () => {
+  const state = JSON.stringify({
+    initialState: {
+      cbirSites: {
+        sites: [
+          { title: "Live Match", url: "https://pixiv.net/artworks/99", thumb: { url: "//avatars.mds.yandex.net/i?id=99" } },
+        ],
+      },
+    },
+  }).replace(/"/g, "&quot;");
+  assert.deepEqual(parseYandexSites(`<div class="Root" data-state="${state}">cbirSites</div>`), [
+    { title: "Live Match", url: "https://pixiv.net/artworks/99", domain: "pixiv.net", thumbnailUrl: "https://avatars.mds.yandex.net/i?id=99" },
+  ]);
 });

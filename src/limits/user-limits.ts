@@ -22,10 +22,10 @@ export class UserLimits {
   }
 
   checkStart(userId: string, kind: "search" | "extra"): StartCheck {
-    if (this.active.has(userId)) return { ok: false, reason: "active" };
+    if (!this.config.allowConcurrentUserSearches && this.active.has(userId)) return { ok: false, reason: "active" };
     if (kind === "extra") return { ok: true };
     const last = this.lastSearchAt.get(userId);
-    if (last !== undefined) {
+    if (last !== undefined && this.config.userCooldownMs > 0) {
       const left = last + this.config.userCooldownMs - this.now();
       if (left > 0) return { ok: false, reason: "cooldown", waitSec: Math.ceil(left / 1000) };
     }
@@ -45,7 +45,7 @@ export class UserLimits {
     this.active.delete(userId);
   }
 
-  canUseYandex(userId: string, provider: "brightdata" | "serpapi"): boolean {
+  canUseYandex(userId: string, provider: "yandex_direct" | "brightdata" | "serpapi"): boolean {
     const c = this.counters.get(userId, vnDayKey(this.now()));
     if (c.yandex >= this.config.userDailyYandex) return false;
     return provider !== "serpapi" || c.yandexSerpapi < this.config.userDailyYandexSerpapi;

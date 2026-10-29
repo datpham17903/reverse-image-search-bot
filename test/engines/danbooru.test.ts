@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createDanbooru } from "../../src/engines/danbooru.ts";
+import { createDanbooru, parseIqdbHtml } from "../../src/engines/danbooru.ts";
 import type { EngineInput } from "../../src/engines/types.ts";
 
 const iqdb = readFileSync(new URL("../fixtures/danbooru/iqdb.json", import.meta.url), "utf8");
@@ -80,4 +80,23 @@ test("unexpected payload → unavailable without throwing", async () => {
   assert.equal(bad.status, "unavailable");
   const net = await make((async () => { throw new TypeError("boom"); }) as typeof fetch).search(input(), "danbooru");
   assert.equal(net.status, "unavailable");
+});
+
+test("parseIqdbHtml extracts NSFW and safe matches from IQDB tables", () => {
+  const html = `
+    <html><head><title>Multi-service image search - iqdb.org</title></head><body>
+    <table><tr><th>Best match</th></tr>
+    <tr><td class="image"><a href="//gelbooru.com/index.php?page=post&id=999"><img src="/thu/thu_1.jpg"></a></td></tr>
+    <tr><td>Gelbooru</td></tr>
+    <tr><td>1920×1080 [Explicit]</td></tr>
+    <tr><td>94% similarity</td></tr></table>
+    </body></html>
+  `;
+  const matches = parseIqdbHtml(html);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]!.url, "https://gelbooru.com/index.php?page=post&id=999");
+  assert.equal(matches[0]!.score, 94);
+  assert.equal(matches[0]!.rating, "e");
+  assert.equal(matches[0]!.adult, true);
+  assert.equal(matches[0]!.previewUrl, "https://iqdb.org/thu/thu_1.jpg");
 });

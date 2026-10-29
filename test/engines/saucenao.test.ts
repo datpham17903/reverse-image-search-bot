@@ -160,3 +160,27 @@ test("ImageError from jpeg() → invalid_input, not sent", async () => {
   assert.equal(r.status, "invalid_input");
   assert.equal(r.sent, false);
 });
+
+test("hideNormal: false finds NSFW results in normal channels and marks them adult: true", async () => {
+  const { calls, f } = capture();
+  const engine = createSauceNao({ fetch: f, apiKey: "KEY", hideNormal: false });
+  const r = await engine.search(input({ nsfwChannel: false }), "saucenao");
+  assert.equal(new URL(calls[0]!.url).searchParams.has("hide"), false);
+  const hidden = r.matches.find(m => m.title === "Hidden Show");
+  assert.ok(hidden);
+  assert.equal(hidden.adult, true);
+});
+
+test("rotates across multiple API keys on 429 and falls back to web scrape", async () => {
+  const usedKeys: (string | null)[] = [];
+  const f = (async (url: string) => {
+    const k = new URL(url).searchParams.get("api_key");
+    usedKeys.push(k);
+    if (k === "k1") return new Response("slow down", { status: 429 });
+    return new Response(search);
+  }) as unknown as typeof fetch;
+  const engine = createSauceNao({ fetch: f, apiKeys: ["k1", "k2"], hideNormal: false });
+  const r = await engine.search(input(), "saucenao");
+  assert.equal(r.status, "ok");
+  assert.deepEqual(usedKeys, ["k1", "k2"]);
+});

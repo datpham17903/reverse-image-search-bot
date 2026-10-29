@@ -9,7 +9,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.test.ts\"",
-    "start": "node --env-file-if-exists=.env src/index.ts"
+    "start": "node --use-env-proxy --env-file-if-exists=.env src/index.ts"
   },
   "dependencies": {
     "discord.js": "14.27.0",

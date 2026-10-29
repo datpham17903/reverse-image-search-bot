@@ -22,19 +22,19 @@ function build(name: string): { engine: Engine; provider: ProviderId } {
   switch (name) {
     case "tracemoe": return { engine: createTraceMoe({ fetch }), provider: "tracemoe" };
     case "saucenao": {
-      const apiKey = process.env.SAUCENAO_API_KEY;
-      if (!apiKey) throw new Error("SAUCENAO_API_KEY is required");
-      return { engine: createSauceNao({ fetch, apiKey }), provider: "saucenao" };
+      const apiKey = process.env.SAUCENAO_API_KEY ?? "";
+      return { engine: createSauceNao({ fetch, apiKey, hideNormal: false, webFallback: true }), provider: "saucenao" };
     }
     case "danbooru": {
       const { DANBOORU_LOGIN: login, DANBOORU_API_KEY: apiKey, DANBOORU_USER_ID: userId } = process.env;
-      if (!login || !apiKey || !userId) throw new Error("DANBOORU_LOGIN, DANBOORU_API_KEY and DANBOORU_USER_ID are required");
-      return { engine: createDanbooru({ fetch, login, apiKey, userId }), provider: "danbooru" };
+      return { engine: createDanbooru({ fetch, login, apiKey, userId, includeIqdb: true }), provider: "danbooru" };
+    }
+    case "iqdb": {
+      return { engine: createDanbooru({ fetch, includeIqdb: true }), provider: "iqdb" };
     }
     case "yandex": {
       const { BRIGHTDATA_API_KEY: brightdataApiKey, BRIGHTDATA_ZONE: brightdataZone, SERPAPI_API_KEY: serpapiApiKey } = process.env;
-      if (!brightdataApiKey || !brightdataZone) throw new Error("BRIGHTDATA_API_KEY and BRIGHTDATA_ZONE are required");
-      return { engine: createYandex({ fetch, brightdataApiKey, brightdataZone, serpapiApiKey: serpapiApiKey ?? "" }), provider: "brightdata" };
+      return { engine: createYandex({ fetch, brightdataApiKey, brightdataZone, serpapiApiKey, includeDirect: true }), provider: "yandex_direct" };
     }
     default: throw new Error(`unknown engine: ${name}`);
   }

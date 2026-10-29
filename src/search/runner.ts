@@ -44,7 +44,7 @@ export function createRunner(deps: {
       for (const provider of engine.providers) {
         if (!health.isHealthy(provider)) { last = "unavailable"; continue; }
         if (gates.budget(provider, ctx.purpose) === "server_quota") { last = "server_quota"; continue; }
-        if (isYandex && !userLimits.canUseYandex(ctx.userId, provider as "brightdata" | "serpapi")) {
+        if (isYandex && !userLimits.canUseYandex(ctx.userId, provider as "yandex_direct" | "brightdata" | "serpapi")) {
           last = "user_quota"; continue;
         }
         let remaining = ctx.deadlineAt - now();
@@ -77,12 +77,13 @@ export function createRunner(deps: {
           if (provider !== "serpapi" || definitive) usage.record(provider, ctx.purpose, now());
         }
         if (engine.id === "saucenao" && res.quota) gates.noteSaucenaoHeader(res.quota);
-        if (provider === "brightdata") {
+        if (provider === "brightdata" || provider === "yandex_direct") {
           if (res.parseFailed) health.noteParseFailure(provider);
           else if (definitive) health.noteSuccess(provider);
         }
 
-        if (res.status === "ok" || res.status === "no_match") {
+        const tryNextBooru = engine.id === "danbooru" && res.status === "no_match" && provider !== engine.providers.at(-1);
+        if (res.status === "ok" || (res.status === "no_match" && !tryNextBooru)) {
           const ttl = res.status === "ok" ? config.cacheHitTtlDays * DAY_MS : config.cacheMissTtlHours * HOUR_MS;
           cache.put(key, engine.id, res.status, JSON.stringify({ status: res.status, matches: res.matches, via: provider }), ttl);
           return result(res.status, res.matches, provider);

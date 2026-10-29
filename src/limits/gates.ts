@@ -20,7 +20,8 @@ export interface Gates {
   stats(): ProviderStats[];
 }
 
-const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "brightdata", "serpapi"];
+const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "yandex_direct", "brightdata", "serpapi"];
+const LEGACY_STATS_PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "brightdata", "serpapi"];
 const DAY_MS = 86_400_000;
 const TRACE_DEFAULT_QUOTA = 100;
 const SAUCENAO_SHORT_BLOCK_MS = 30_000;
@@ -33,6 +34,7 @@ export class ProviderGates implements Gates {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly semaphores: Record<ProviderId, Semaphore>;
   private readonly windows: Partial<Record<ProviderId, SlidingWindow>>;
+  private readonly unlimited: boolean;
   private saucenaoShortUntil = 0;
   private saucenaoLongUntil = 0;
   private traceSnapshot: { quota: number; quotaUsed: number; at: number } | null = null;
@@ -43,17 +45,33 @@ export class ProviderGates implements Gates {
     this.usage = deps.usage;
     this.now = deps.now;
     this.sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
-    this.semaphores = {
-      tracemoe: new Semaphore(1),
-      saucenao: new Semaphore(2),
-      danbooru: new Semaphore(1),
-      brightdata: new Semaphore(8),
-      serpapi: new Semaphore(1),
-    };
-    this.windows = {
-      danbooru: new SlidingWindow(1, 1_000, deps.now),
-      serpapi: new SlidingWindow(50, 3_600_000, deps.now),
-    };
+    // In unlimited mode, open high-concurrency slots and skip artificial 1s sliding window delays.
+    this.unlimited = deps.config.unlimitedGates === true;
+    this.semaphores = this.unlimited
+      ? {
+          tracemoe: new Semaphore(16),
+          saucenao: new Semaphore(16),
+          danbooru: new Semaphore(16),
+          iqdb: new Semaphore(16),
+          yandex_direct: new Semaphore(16),
+          brightdata: new Semaphore(16),
+          serpapi: new Semaphore(8),
+        }
+      : {
+          tracemoe: new Semaphore(1),
+          saucenao: new Semaphore(2),
+          danbooru: new Semaphore(1),
+          iqdb: new Semaphore(4),
+          yandex_direct: new Semaphore(8),
+          brightdata: new Semaphore(8),
+          serpapi: new Semaphore(1),
+        };
+    this.windows = this.unlimited
+      ? {}
+      : {
+          danbooru: new SlidingWindow(1, 1_000, deps.now),
+          serpapi: new SlidingWindow(50, 3_600_000, deps.now),
+        };
   }
 
   async acquire(provider: ProviderId, waitMs: number): Promise<Acquired> {
@@ -62,7 +80,7 @@ export class ProviderGates implements Gates {
     const release = await this.semaphores[provider].acquire(waitMs);
     if (!release) return { busy: true };
     for (;;) {
-      const shortBlock = provider === "saucenao" ? Math.max(0, this.saucenaoShortUntil - this.now()) : 0;
+      const shortBlock = !this.unlimited && provider === "saucenao" ? Math.max(0, this.saucenaoShortUntil - this.now()) : 0;
       const wait = Math.max(window?.msUntilFree() ?? 0, shortBlock);
       if (wait <= 0) break;
       if (wait > deadline - this.now()) {
@@ -76,6 +94,13 @@ export class ProviderGates implements Gates {
   }
 
   budget(provider: ProviderId, purpose: CallPurpose): "ok" | "server_quota" {
+    if (this.unlimited) {
+      if (provider === "brightdata" || provider === "serpapi") {
+        const m = this.monthly(provider);
+        return m.usedToday >= m.allowance ? "server_quota" : "ok";
+      }
+      return "ok";
+    }
     switch (provider) {
       case "tracemoe": {
         const { used, quota } = this.trace();
@@ -90,6 +115,8 @@ export class ProviderGates implements Gates {
       case "saucenao":
         return this.now() < this.saucenaoLongUntil ? "server_quota" : "ok";
       case "danbooru":
+      case "iqdb":
+      case "yandex_direct":
         return "ok";
       case "brightdata":
       case "serpapi": {
@@ -116,16 +143,19 @@ export class ProviderGates implements Gates {
   stats(): ProviderStats[] {
     const now = this.now();
     const dayStart = startOfUtcDay(now);
-    return PROVIDERS.map((provider): ProviderStats => {
+    const list = this.unlimited ? PROVIDERS : LEGACY_STATS_PROVIDERS;
+    return list.map((provider): ProviderStats => {
       const usedToday = this.usage.count(provider, dayStart, now + 1);
       switch (provider) {
         case "tracemoe": {
           const { used, quota } = this.trace();
-          return { provider, usedToday, allowanceToday: null, usedPeriod: used, periodLimit: quota,
-            remaining: Math.max(0, quota - used), blocked: this.budget(provider, "primary") === "server_quota" };
+          return { provider, usedToday, allowanceToday: null, usedPeriod: used, periodLimit: this.unlimited ? null : quota,
+            remaining: this.unlimited ? undefined : Math.max(0, quota - used), blocked: this.budget(provider, "primary") === "server_quota" };
         }
         case "saucenao":
         case "danbooru":
+        case "iqdb":
+        case "yandex_direct":
           return { provider, usedToday, allowanceToday: null,
             usedPeriod: usedToday, periodLimit: null, blocked: this.budget(provider, "primary") === "server_quota" };
         case "brightdata":

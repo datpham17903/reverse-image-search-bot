@@ -52,8 +52,9 @@ export function createApp(o: {
     picks: new SessionStore<PendingPick>({ ttlMs: SESSION_TTL_MS, maxBytes: PICK_MAX_BYTES, now }),
     loadImage: o.loadImage ?? ((input) => loadImageDefault(input, { cache, config, now, fetch: o.fetch })),
     yandexAvailable(userId) {
-      return (health.isHealthy("brightdata") && gates.budget("brightdata", "extra") === "ok" && userLimits.canUseYandex(userId, "brightdata"))
-        || (gates.budget("serpapi", "extra") === "ok" && userLimits.canUseYandex(userId, "serpapi"));
+      return (health.isHealthy("yandex_direct") && gates.budget("yandex_direct", "extra") === "ok" && userLimits.canUseYandex(userId, "yandex_direct"))
+        || (Boolean(config.brightdataApiKey && config.brightdataZone) && health.isHealthy("brightdata") && gates.budget("brightdata", "extra") === "ok" && userLimits.canUseYandex(userId, "brightdata"))
+        || (Boolean(config.serpapiApiKey) && gates.budget("serpapi", "extra") === "ok" && userLimits.canUseYandex(userId, "serpapi"));
     },
   };
 }

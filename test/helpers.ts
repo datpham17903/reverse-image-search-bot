@@ -14,7 +14,19 @@ export const REQUIRED_ENV: Record<string, string> = {
 };
 
 export function testConfig(over: Partial<Config> = {}): Config {
-  return { ...loadConfig(REQUIRED_ENV), ...over };
+  return {
+    ...loadConfig(REQUIRED_ENV),
+    maxActiveJobs: 100,
+    userCooldownMs: 10000,
+    userDailySearches: 30,
+    userDailyYandex: 10,
+    userDailyYandexSerpapi: 2,
+    traceUnknownShare: 0.5,
+    unlimitedGates: false,
+    parallelSearch: false,
+    allowConcurrentUserSearches: false,
+    ...over,
+  };
 }
 
 export function fakeClock(start = 0): { now(): number; set(t: number): void; advance(ms: number): void } {

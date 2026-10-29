@@ -87,6 +87,7 @@ export async function startSearch(p: StartSearchParams, r: Responder, app: App):
     const outcome = await runSearch({
       code, guildId: p.guildId, userId, mode: p.mode, nsfwChannel: p.nsfwChannel, image,
       deadlineAt: receivedAt + app.config.jobDeadlineMs,
+      parallel: app.config.parallelSearch,
       onProgress: (pr) => safeEdit(r, renderProgress(pr, deadlineSec)),
     }, app.runner);
     app.sessions.set(code, {

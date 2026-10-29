@@ -18,7 +18,8 @@ const COLOR = { notFound: 0x80848e, incomplete: 0xf0b232, progress: 0x5865f2 };
 const TIER_COLOR: Record<Tier, number> = { source: 0x23a55a, maybe: 0xf0b232, related: 0x80848e };
 const MODES: Mode[] = ["auto", "anime", "art", "movie"];
 const PROVIDER_LABEL: Record<ProviderId, string> = {
-  tracemoe: "trace.moe", saucenao: "SauceNAO", danbooru: "Danbooru", brightdata: "Bright Data", serpapi: "SerpApi",
+  tracemoe: "trace.moe", saucenao: "SauceNAO", danbooru: "Danbooru", iqdb: "IQDB",
+  yandex_direct: "Yandex Direct", brightdata: "Bright Data", serpapi: "SerpApi",
 };
 
 const payload = (embeds: APIEmbed[], components: unknown[] = [], content?: string): Payload =>
@@ -198,7 +199,7 @@ export function renderQuota(stats: ProviderStats[], health: Record<string, { hea
       : "bình thường";
     const label = `**${PROVIDER_LABEL[s.provider]}**`;
     if (s.provider === "tracemoe") return `${label} · 24 giờ ${s.usedPeriod}/${s.periodLimit ?? "–"} · ${status}`;
-    if (s.provider === "saucenao" || s.provider === "danbooru") {
+    if (s.provider === "saucenao" || s.provider === "danbooru" || s.provider === "iqdb" || s.provider === "yandex_direct") {
       const left = s.remaining !== undefined ? ` · còn ${s.remaining}` : "";
       return `${label} · hôm nay ${s.usedToday}${left} · ${status}`;
     }

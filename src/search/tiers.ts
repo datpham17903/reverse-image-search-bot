@@ -6,7 +6,15 @@ export const THRESHOLDS = {
   danbooru: { source: 90, maybe: 70 },
 } as const;
 
-export const KNOWN_SOURCE_DOMAINS = ["pixiv.net", "x.com", "twitter.com", "danbooru.donmai.us", "gelbooru.com", "artstation.com", "deviantart.com", "imdb.com", "themoviedb.org", "myanimelist.net", "anilist.co"];
+export const KNOWN_SOURCE_DOMAINS = [
+  "pixiv.net", "x.com", "twitter.com", "danbooru.donmai.us", "gelbooru.com", "artstation.com", "deviantart.com",
+  "imdb.com", "themoviedb.org", "myanimelist.net", "anilist.co",
+  "yande.re", "konachan.com", "sankakucomplex.com", "e-hentai.org", "exhentai.org", "nhentai.net", "hitomi.la",
+  "kemono.su", "kemono.party", "coomer.su", "fantia.jp", "fanbox.cc", "dlsite.com", "fanza.co.jp", "dmm.co.jp",
+  "nijie.info", "nicovideo.jp", "newgrounds.com", "rule34.xxx", "zerochan.net", "anime-pictures.net", "e-shuushuu.net",
+  "booth.pm", "skeb.jp", "patreon.com", "bsky.app", "javdb.com", "javlibrary.com", "missav.com", "pornhub.com",
+  "xvideos.com", "spankbang.com", "erome.com", "onlyfans.com", "reddit.com", "weibo.com", "bilibili.com",
+];
 
 function hostOf(m: Match): string | null {
   if (m.domain) return m.domain.toLowerCase();

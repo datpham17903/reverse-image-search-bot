@@ -15,11 +15,32 @@ export function createEngines(config: Config, f: typeof fetch): {
   return {
     engines: {
       tracemoe,
-      saucenao: createSauceNao({ fetch: f, apiKey: config.saucenaoApiKey }),
-      danbooru: createDanbooru({ fetch: f, login: config.danbooruLogin, apiKey: config.danbooruApiKey, userId: config.danbooruUserId }),
-      yandex: createYandex({ fetch: f, brightdataApiKey: config.brightdataApiKey, brightdataZone: config.brightdataZone, serpapiApiKey: config.serpapiApiKey }),
+      saucenao: createSauceNao({
+        fetch: f,
+        apiKeys: config.saucenaoApiKeys,
+        apiKey: config.saucenaoApiKey,
+        hideNormal: false,
+        webFallback: true,
+      }),
+      danbooru: createDanbooru({
+        fetch: f,
+        login: config.danbooruLogin,
+        apiKey: config.danbooruApiKey,
+        userId: config.danbooruUserId,
+        includeIqdb: true,
+      }),
+      yandex: createYandex({
+        fetch: f,
+        brightdataApiKey: config.brightdataApiKey,
+        brightdataZone: config.brightdataZone,
+        serpapiApiKey: config.serpapiApiKey,
+        includeDirect: true,
+      }),
     },
     traceMe: (signal) => tracemoe.getMe(signal),
-    serpapiAccount: (signal) => getSerpApiAccount({ fetch: f, apiKey: config.serpapiApiKey, ...(signal ? { signal } : {}) }),
+    serpapiAccount: (signal) =>
+      config.serpapiApiKey
+        ? getSerpApiAccount({ fetch: f, apiKey: config.serpapiApiKey, ...(signal ? { signal } : {}) })
+        : Promise.resolve({ totalSearchesLeft: 0, thisMonthUsage: 0 }),
   };
 }

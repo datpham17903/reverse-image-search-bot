@@ -1,7 +1,26 @@
 services:
+  warp:
+    image: caomingjun/warp:latest
+    restart: unless-stopped
+    environment:
+      - WARP_SLEEP=2
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - ./data/warp:/var/lib/cloudflare-warp
+
   bot:
     build: .
+    depends_on:
+      - warp
     env_file: .env
+    environment:
+      - HTTP_PROXY=http://warp:1080
+      - HTTPS_PROXY=http://warp:1080
+      - NO_PROXY=discord.com,discordapp.com,cdn.discordapp.com,media.discordapp.net,localhost,127.0.0.1
     volumes:
       - ./data:/app/data
     restart: unless-stopped

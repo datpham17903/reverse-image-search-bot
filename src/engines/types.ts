@@ -1,5 +1,5 @@
 export type EngineId = "tracemoe" | "saucenao" | "danbooru" | "yandex";
-export type ProviderId = "tracemoe" | "saucenao" | "danbooru" | "brightdata" | "serpapi";
+export type ProviderId = "tracemoe" | "saucenao" | "danbooru" | "iqdb" | "yandex_direct" | "brightdata" | "serpapi";
 export type Mode = "auto" | "anime" | "art" | "movie";
 export type Tier = "source" | "maybe" | "related";
 export type CallPurpose = "primary" | "anime_followup" | "unknown_check" | "extra";

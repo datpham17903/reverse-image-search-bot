@@ -1,5 +1,5 @@
 import type { EngineId, EngineOutcome, ImageSource, Mode, TieredMatch } from "../engines/types.ts";
-import { nextCall } from "./flow.ts";
+import { nextBatch, nextCall } from "./flow.ts";
 import type { Runner } from "./runner.ts";
 import { pickResults } from "./select.ts";
 import { tierAll } from "./tiers.ts";
@@ -11,7 +11,8 @@ export interface SearchOutcome {
 }
 export interface SearchRequest {
   code: string; guildId: string; userId: string; mode: Mode; nsfwChannel: boolean;
-  image: ImageSource; deadlineAt: number; onProgress?: (p: Progress) => void | Promise<void>;
+  image: ImageSource; deadlineAt: number; parallel?: boolean;
+  onProgress?: (p: Progress) => void | Promise<void>;
 }
 
 export function finalize(code: string, mode: Mode, outcomes: EngineOutcome[]): SearchOutcome {
@@ -25,6 +26,25 @@ export function finalize(code: string, mode: Mode, outcomes: EngineOutcome[]): S
 
 export async function runSearch(req: SearchRequest, run: Runner): Promise<SearchOutcome> {
   const outcomes: EngineOutcome[] = [];
+  if (req.parallel) {
+    for (;;) {
+      const batch = nextBatch({ mode: req.mode, outcomes, tiered: tierAll(outcomes.flatMap(o => o.matches)) });
+      if (batch.length === 0) break;
+      await req.onProgress?.({ done: outcomes.map(o => o.engine), current: batch[0]!.engine });
+      const results = await Promise.all(
+        batch.map(call =>
+          run(call.engine, {
+            guildId: req.guildId, userId: req.userId, mode: req.mode, nsfwChannel: req.nsfwChannel,
+            image: req.image, deadlineAt: req.deadlineAt, purpose: call.purpose,
+          }),
+        ),
+      );
+      outcomes.push(...results);
+      if (results.some(o => o.status === "deadline")) break;
+    }
+    return finalize(req.code, req.mode, outcomes);
+  }
+
   for (;;) {
     const call = nextCall({ mode: req.mode, outcomes, tiered: tierAll(outcomes.flatMap(o => o.matches)) });
     if (!call) break;
@@ -45,5 +65,5 @@ export async function runExtraYandex(prev: SearchOutcome, req: SearchRequest, ru
     image: req.image, deadlineAt: req.deadlineAt, purpose: "extra",
   });
   const outcomes = [...prev.outcomes.filter(o => o.engine !== "yandex"), outcome];
-  return finalize(prev.code, prev.mode, outcomes);
+  return finalize(prev.code, req.mode, outcomes);
 }

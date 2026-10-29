@@ -5,6 +5,7 @@ export interface Config {
   discordApplicationId: string;
   discordGuildId: string;
   saucenaoApiKey: string;
+  saucenaoApiKeys?: string[];
   danbooruLogin: string;
   danbooruApiKey: string;
   danbooruUserId: string;
@@ -26,6 +27,9 @@ export interface Config {
   cacheHitTtlDays: number;
   cacheMissTtlHours: number;
   traceUnknownShare: number;
+  unlimitedGates?: boolean;
+  parallelSearch?: boolean;
+  allowConcurrentUserSearches?: boolean;
 }
 
 export class ConfigError extends Error {
@@ -38,19 +42,24 @@ export class ConfigError extends Error {
 }
 
 const required = z.string().min(1);
+const optionalStr = z.string().default("");
 const positiveInt = (def: number) => z.coerce.number().int().positive().default(def);
+const nonNegativeInt = (def: number) => z.coerce.number().int().min(0).default(def);
+const boolFlag = (def: boolean) =>
+  z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1").default(def);
 
 const schema = z.object({
   DISCORD_TOKEN: required,
   DISCORD_APPLICATION_ID: required,
   DISCORD_GUILD_ID: required,
-  SAUCENAO_API_KEY: required,
-  DANBOORU_LOGIN: required,
-  DANBOORU_API_KEY: required,
-  DANBOORU_USER_ID: required,
-  BRIGHTDATA_API_KEY: required,
-  BRIGHTDATA_ZONE: required,
-  SERPAPI_API_KEY: required,
+  SAUCENAO_API_KEY: optionalStr,
+  SAUCENAO_API_KEYS: optionalStr,
+  DANBOORU_LOGIN: optionalStr,
+  DANBOORU_API_KEY: optionalStr,
+  DANBOORU_USER_ID: optionalStr,
+  BRIGHTDATA_API_KEY: optionalStr,
+  BRIGHTDATA_ZONE: optionalStr,
+  SERPAPI_API_KEY: optionalStr,
   SQLITE_PATH: z.string().min(1).default("./data/bot.db"),
   BRIGHTDATA_MONTHLY_CREDITS: positiveInt(5000),
   SERPAPI_MONTHLY_SEARCHES: positiveInt(250),
@@ -58,14 +67,17 @@ const schema = z.object({
   IMAGE_MAX_PIXELS: positiveInt(20000000),
   ENGINE_TIMEOUT_MS: positiveInt(15000),
   JOB_DEADLINE_MS: positiveInt(60000),
-  MAX_ACTIVE_JOBS: positiveInt(100),
-  USER_COOLDOWN_MS: positiveInt(10000),
-  USER_DAILY_SEARCHES: positiveInt(30),
-  USER_DAILY_YANDEX: positiveInt(10),
-  USER_DAILY_YANDEX_SERPAPI: positiveInt(2),
-  TRACE_UNKNOWN_SHARE: z.coerce.number().min(0).max(1).default(0.5),
+  MAX_ACTIVE_JOBS: positiveInt(500),
+  USER_COOLDOWN_MS: nonNegativeInt(0),
+  USER_DAILY_SEARCHES: positiveInt(1000000),
+  USER_DAILY_YANDEX: positiveInt(1000000),
+  USER_DAILY_YANDEX_SERPAPI: positiveInt(250),
+  TRACE_UNKNOWN_SHARE: z.coerce.number().min(0).max(1).default(1),
   CACHE_HIT_TTL_DAYS: positiveInt(30),
   CACHE_MISS_TTL_HOURS: positiveInt(24),
+  UNLIMITED_GATES: boolFlag(true),
+  PARALLEL_SEARCH: boolFlag(true),
+  ALLOW_CONCURRENT_USER_SEARCHES: boolFlag(true),
 });
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -78,11 +90,18 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     throw new ConfigError([...names]);
   }
   const e = parsed.data;
+  const saucenaoApiKeys = [...new Set(
+    `${e.SAUCENAO_API_KEYS},${e.SAUCENAO_API_KEY}`
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )];
   return {
     discordToken: e.DISCORD_TOKEN,
     discordApplicationId: e.DISCORD_APPLICATION_ID,
     discordGuildId: e.DISCORD_GUILD_ID,
-    saucenaoApiKey: e.SAUCENAO_API_KEY,
+    saucenaoApiKey: saucenaoApiKeys[0] ?? e.SAUCENAO_API_KEY,
+    saucenaoApiKeys,
     danbooruLogin: e.DANBOORU_LOGIN,
     danbooruApiKey: e.DANBOORU_API_KEY,
     danbooruUserId: e.DANBOORU_USER_ID,
@@ -104,5 +123,8 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     cacheHitTtlDays: e.CACHE_HIT_TTL_DAYS,
     cacheMissTtlHours: e.CACHE_MISS_TTL_HOURS,
     traceUnknownShare: e.TRACE_UNKNOWN_SHARE,
+    unlimitedGates: e.UNLIMITED_GATES,
+    parallelSearch: e.PARALLEL_SEARCH,
+    allowConcurrentUserSearches: e.ALLOW_CONCURRENT_USER_SEARCHES,
   };
 }

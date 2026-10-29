@@ -22,20 +22,39 @@ function toSite(title: unknown, url: unknown, thumb: unknown): YandexSite | null
   return { title, url, domain: hostname(url), ...(t ? { thumbnailUrl: t } : {}) };
 }
 
+// Extracts site matches from both legacy data-state.sites and modern initialState.cbirSites structures.
+function extractCandidateSites(state: unknown): unknown[] | null {
+  if (!state || typeof state !== "object") return null;
+  const s = state as Record<string, any>;
+  if (Array.isArray(s.sites)) return s.sites;
+  if (Array.isArray(s.cbirSites?.sites)) return s.cbirSites.sites;
+  const init = s.initialState as Record<string, any> | undefined;
+  if (init && typeof init === "object") {
+    const a = Array.isArray(init.cbirSites?.sites) ? init.cbirSites.sites : null;
+    const b = Array.isArray(init.cbirSitesList?.sites) ? init.cbirSitesList.sites : null;
+    if (a && a.length > 0) return a;
+    if (b && b.length > 0) return b;
+    if (a || b) return [];
+  }
+  return null;
+}
+
 function sitesFromState(html: string): YandexSite[] | null {
+  let foundEmpty = false;
   for (const m of html.matchAll(/data-state=(?:"([^"]*)"|'([^']*)')/g)) {
     let state: unknown;
     try { state = JSON.parse(unescapeHtml(m[1] ?? m[2] ?? "")); } catch { continue; }
-    const sites = (state as { sites?: unknown } | null)?.sites;
-    if (!Array.isArray(sites)) continue;
+    const sites = extractCandidateSites(state);
+    if (!sites) continue;
     const out: YandexSite[] = [];
     for (const s of sites as Record<string, any>[]) {
-      const site = toSite(s?.title, s?.url, s?.thumb?.url ?? s?.thumb);
+      const site = toSite(s?.title, s?.url, s?.thumb?.url ?? s?.thumb ?? s?.originalImage?.url);
       if (site) out.push(site);
     }
-    return out;
+    if (out.length > 0) return out;
+    foundEmpty = true;
   }
-  return null;
+  return foundEmpty ? [] : null;
 }
 
 function sitesFromDom(html: string): YandexSite[] | null {
@@ -59,6 +78,6 @@ function extractSites(html: string): YandexSite[] {
 
 export function parseYandexSites(html: string): YandexSite[] {
   if (/showcaptcha|SmartCaptcha/i.test(html)) throw new YandexParseError("captcha page");
-  if (!html.includes("CbirSites")) throw new YandexParseError("unrecognized page");
+  if (!html.includes("CbirSites") && !html.includes("cbirSites")) throw new YandexParseError("unrecognized page");
   return extractSites(html);
 }

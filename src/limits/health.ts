@@ -3,7 +3,7 @@ import type { UsageStore } from "../store/usage.ts";
 
 const FAILURE_THRESHOLD = 3;
 const UNHEALTHY_MS = 3_600_000;
-const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "brightdata", "serpapi"];
+const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "yandex_direct", "brightdata", "serpapi"];
 
 interface Entry { failures: number; unhealthyUntil: number | null }
 type Snapshot = Record<ProviderId, { healthy: boolean; failures: number; unhealthyUntil: number | null }>;

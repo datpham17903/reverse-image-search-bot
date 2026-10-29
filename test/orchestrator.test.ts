@@ -54,3 +54,15 @@ test("runExtraYandex merges into the previous outcome", async () => {
   assert.deepEqual(r.outcomes.map(x => `${x.engine}:${x.status}`), ["saucenao:no_match", "yandex:ok"]);
   assert.equal(r.state, "found");
 });
+
+test("runSearch with parallel: true fires fast wave concurrently and stops when source found", async () => {
+  const called: string[] = [];
+  const run: Runner = async (engine) => {
+    called.push(engine);
+    return engine === "danbooru" ? o("danbooru", "ok", [m("danbooru", 95)]) : o(engine, "no_match");
+  };
+  const r = await runSearch({ ...req(), parallel: true }, run);
+  assert.deepEqual(called, ["saucenao", "danbooru", "tracemoe"]);
+  assert.equal(r.state, "found");
+  assert.equal(r.main?.engine, "danbooru");
+});
