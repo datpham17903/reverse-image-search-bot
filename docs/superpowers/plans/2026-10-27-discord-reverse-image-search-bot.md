@@ -1,30 +1,30 @@
-# Bot Discord tìm nguồn ảnh — Implementation Plan
+# Bot Discord tìm nguồn ảnh — Implementation Plan (v3.0 Updated)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Xây bot Discord một process tìm nguồn ảnh (cảnh anime, art, phim) bằng trace.moe, SauceNAO, Danbooru IQDB và Yandex, chỉ dùng free tier, phục vụ nhiều người cùng lúc trong một server.
+**Goal:** Xây dựng bot Discord tìm nguồn ảnh (Anime, Art/Manga/Doujinshi 2D, Phim/Cosplay/3D, hỗ trợ đầy đủ cả SFW & NSFW) bằng `trace.moe`, `SauceNAO` (Multi-key + Web HTML Fallback), `Danbooru + IQDB.org` và `Yandex Images` (Direct + Bright Data / SerpApi), hoạt động **Free 100%, Không giới hạn (Unlimited) và Không độ trễ (Zero-Delay Parallel Waves)**.
 
-**Architecture:** Một process Node 24 chạy discord.js qua Gateway. `/search`, menu tin nhắn và các nút đi qua một luồng chung: kiểm tra hạn mức → defer → tải và chuẩn hóa ảnh → orchestrator hỏi một hàm quyết định thuần "engine nào tiếp theo" → runner gọi engine qua cache, gộp request, gate từng nhà cung cấp và ngân sách → render embed kiểu C. SQLite (`node:sqlite`) giữ cache, lượng dùng và bộ đếm người dùng; phiên nút và lượt tìm đang chạy nằm trong RAM.
+**Architecture:** Một process Node 24 chạy `discord.js` qua Gateway (kèm `--use-env-proxy` kết nối với sidecar Cloudflare WARP khi chạy Docker). `/search`, menu tin nhắn và các nút đi qua một luồng chung: kiểm tra hạn mức → defer → tải và chuẩn hóa ảnh → orchestrator chạy song song theo đợt (`nextBatch`: Đợt 1 gồm `saucenao`, `danbooru/iqdb`, `tracemoe`; Đợt 2 gồm `yandex`) → runner gọi engine qua cache, gộp request, gate từng nhà cung cấp → render embed kiểu C với kiểm soát ẩn/hiện preview NSFW theo loại kênh (`previewAllowed`). SQLite (`node:sqlite`) giữ cache, lượng dùng và bộ đếm người dùng; phiên nút và lượt tìm đang chạy nằm trong RAM.
 
-**Tech Stack:** Node 24 (type stripping, `fetch`, `node:sqlite`, `node:test`), TypeScript 7.0.2 (chỉ typecheck), discord.js 14.27.0, sharp 0.35.5, zod 4.6.7, Docker.
+**Tech Stack:** Node 24 (type stripping, `--use-env-proxy`, `fetch`, `node:sqlite`, `node:test`), TypeScript 7.0.2 (chỉ typecheck), discord.js 14.27.0, sharp 0.35.5, zod 4.6.7, Docker + Cloudflare WARP (`caomingjun/warp`).
 
 **Spec:** `docs/superpowers/specs/2026-10-27-discord-reverse-image-search-bot-design.md`
 
 ## Global Constraints
 
-- Node 24, chạy `.ts` trực tiếp (type stripping); dùng `fetch`, `node:sqlite`, `node:test`, `--env-file` có sẵn.
+- Node 24, chạy `.ts` trực tiếp (type stripping); dùng `fetch`, `node:sqlite`, `node:test`, `--env-file-if-exists`, `--use-env-proxy` có sẵn.
 - Thư viện pin chính xác: discord.js 14.27.0, sharp 0.35.5, zod 4.6.7; dev: typescript 7.0.2, @types/node 24.19.2. Chỉ thêm dependency khi thư viện chuẩn và ba gói trên không đủ.
 - `tsconfig.json`: `erasableSyntaxOnly` (không `enum`, không `namespace`, không parameter properties), import tương đối ghi đuôi `.ts`, typecheck bằng `npm run typecheck`.
-- Một process; Docker `node:24-slim`; restart `unless-stopped`; volume cho SQLite.
+- Một process; Docker `node:24-slim` đi kèm sidecar `caomingjun/warp:latest`; restart `unless-stopped`; volume cho SQLite.
 - Một server; lệnh đăng ký theo guild; chỉ bật intent `Guilds`.
 - Mọi chữ bot hiển thị bằng tiếng Việt; tên lệnh `/search`, `/quota`, `/help`; menu tin nhắn "Tìm nguồn ảnh".
 - Mọi tin nhắn của bot dùng `allowedMentions: { parse: [] }`.
-- 0 đồng: không nhiều tài khoản, không xoay IP, không gọi thẳng Yandex từ IP máy chủ, không vượt rate limit.
+- 0 đồng & Không bắt buộc API key bên thứ ba: chỉ yêu cầu 3 biến Discord (`DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`); các key khác là tùy chọn.
+- Hỗ trợ tìm nguồn NSFW ở mọi kênh nhưng tự động ẩn ảnh/video preview nhạy cảm ở kênh thường (`previewAllowed`).
 - Log JSON một dòng ra stdout; không bao giờ ghi token, API key, query ký số của URL Discord hay bytes ảnh.
 - Chỉ tải ảnh từ `https://cdn.discordapp.com` và `https://media.discordapp.net`; ảnh embed chỉ dùng `proxy_url`.
 - Phản hồi ban đầu dưới 3 giây; mỗi lượt tìm kết thúc trong `JOB_DEADLINE_MS` (60 giây).
 - Test: `node:test` + `node:assert/strict`, file `test/**/*.test.ts`, chạy bằng `npm test`. Unit test không bao giờ gọi mạng thật.
-- Commit sau mỗi task (repo khởi tạo ở Task 1). Mỗi bước Commit chạy `git add -A && git commit -m "<message>"` với message ghi trong bước đó.
 
 ## Review Focus
 
@@ -1381,7 +1381,70 @@ services:
 - [ ] **Step 2: Viết 2 skill dự án** (frontmatter `name`, `description`; nội dung ngắn):
   - `phase0-verify`: khi nào chạy, lệnh từng script ở Task 3, fixture nằm ở đâu, cách ghi spec mục 17, chạy lại test adapter sau khi thay fixture.
   - `deploy-vps`: chuẩn bị `.env` trên VPS; `docker compose up -d --build`; xem log `docker compose logs -f bot`; cập nhật (`git pull` rồi build lại, bot tự drain khi nhận SIGTERM); sao lưu `data/bot.db`.
-- [ ] **Step 3: `npm test` và `npm run typecheck`** — Expected: tất cả PASS, typecheck sạch.
-- [ ] **Step 4 (trên VPS):** `docker compose up -d --build` — Expected: log có dòng sẵn sàng, `/search` trong server hoạt động; restart container thì bot quay lại.
-- [ ] **Step 5: Nghiệm thu** theo bảng spec mục 14.2 trong server thử; ghi ca chưa đạt thành việc cần sửa.
-- [ ] **Step 6: Commit** — `git commit -m "chore: docker deployment and project skills"`
+- [x] **Step 3: `npm test` và `npm run typecheck`** — Expected: tất cả PASS, typecheck sạch.
+- [x] **Step 4 (trên VPS):** `docker compose up -d --build` — Expected: log có dòng sẵn sàng, `/search` trong server hoạt động; restart container thì bot quay lại.
+- [x] **Step 5: Nghiệm thu** theo bảng spec mục 14.2 trong server thử; ghi ca chưa đạt thành việc cần sửa.
+- [x] **Step 6: Commit** — `git commit -m "chore: docker deployment and project skills"`
+
+---
+
+## Giai đoạn 2 (v3.0): Nâng cấp Free, Unlimited, Zero-Delay, Full NSFW & Cloudflare WARP
+
+### Task 21: Cấu hình Free & Unlimited (Optional Keys + Zero-Delay Defaults)
+
+**Files:**
+- Modify: `src/config.ts`, `.env.example`, `src/limits/gates.ts`, `src/limits/user-limits.ts`
+- Test: `test/config.test.ts`
+
+- [x] **Step 1:** Chỉ bắt buộc `DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID` trong `loadConfig`; chuyển toàn bộ API key bên thứ ba sang tùy chọn (mặc định `""`).
+- [x] **Step 2:** Thêm `SAUCENAO_API_KEYS` (danh sách key phân tách bằng dấu phẩy), `UNLIMITED_GATES` (mặc định `true`), `PARALLEL_SEARCH` (mặc định `true`), `ALLOW_CONCURRENT_USER_SEARCHES` (mặc định `true`).
+- [x] **Step 3:** Đặt mặc định `USER_COOLDOWN_MS=0`, `USER_DAILY_SEARCHES=1000000`, `USER_DAILY_YANDEX=1000000`, `USER_DAILY_YANDEX_SERPAPI=1000000`.
+
+### Task 22: SauceNAO Multi-Key Rotation, Web HTML Fallback & NSFW `hide=0`
+
+**Files:**
+- Modify: `src/engines/saucenao.ts`, `src/engines/index.ts`
+- Test: `test/engines/saucenao.test.ts`
+
+- [x] **Step 1:** Hỗ trợ xoay vòng nhiều key (`apiKeys`) khi gặp `429`/`quota_exhausted`.
+- [x] **Step 2:** Bổ sung `parseSauceNaoHtml` và `searchSauceNaoWeb` để tìm kiếm trực tiếp qua giao diện Web khi không có API key hoặc toàn bộ key hết quota.
+- [x] **Step 3:** Cấu hình `hideNormal: false` (`hide=0`) để tìm được cả nguồn NSFW ở kênh thường, đồng thời gắn cờ `adult: true` cho các index 18+ (H-Misc, e-hentai, Fakku, Gelbooru, Sankaku, Yande.re…) để `previewAllowed` tự động ẩn ảnh thumbnail ở kênh thường.
+
+### Task 23: Danbooru Optional Auth & IQDB.org Multi-Booru Provider
+
+**Files:**
+- Modify: `src/engines/types.ts`, `src/engines/danbooru.ts`, `src/engines/index.ts`
+- Test: `test/engines/danbooru.test.ts`
+
+- [x] **Step 1:** Thêm `"iqdb"` vào `ProviderId`.
+- [x] **Step 2:** Cho phép gọi `danbooru` không cần Basic Auth khi không cấu hình `DANBOORU_LOGIN`/`DANBOORU_API_KEY`.
+- [x] **Step 3:** Bổ sung `parseIqdbHtml` và `searchIqdbOrg` (`https://iqdb.org/`) bao phủ đồng thời Danbooru, Konachan, Yande.re, Gelbooru, Sankaku Complex, Zerochan, Anime-Pictures kèm phân loại `[Safe]` / `[Ero]` / `[Explicit]`.
+
+### Task 24: Yandex Direct (Family Filter Off) & Modern State Parser
+
+**Files:**
+- Create: `src/engines/yandex/direct.ts`
+- Modify: `src/engines/types.ts`, `src/engines/yandex/parse-html.ts`, `src/engines/yandex/index.ts`, `src/search/tiers.ts`
+- Test: `test/engines/yandex.test.ts`
+
+- [x] **Step 1:** Thêm `"yandex_direct"` vào `ProviderId` và ưu tiên chạy đầu tiên trong `createYandex`.
+- [x] **Step 2:** Gọi `https://yandex.com/images/search?rpt=imageview&cbir_page=sites&family=no&url=<enc>` kèm header `Cookie: yp=1999999999.sp.family%3A0` để mở khóa kết quả NSFW 3D/Cosplay/Movie/2D.
+- [x] **Step 3:** Cập nhật `parseYandexSites` đọc `initialState.cbirSites.sites` và `initialState.cbirSitesList.sites` của giao diện Yandex hiện đại.
+- [x] **Step 4:** Mở rộng `KNOWN_SOURCE_DOMAINS` với các domain 2D/3D/NSFW/Booru phổ biến.
+
+### Task 25: Thực thi Song song theo Đợt (Parallel Waves)
+
+**Files:**
+- Modify: `src/search/flow.ts`, `src/search/orchestrator.ts`, `src/discord/start-search.ts`
+- Test: `test/orchestrator.test.ts`
+
+- [x] **Step 1:** Thêm hàm `nextBatch(mode, outcomes, opts)` trả về danh sách các engine có thể chạy đồng thời trong mỗi đợt.
+- [x] **Step 2:** Cập nhật `runSearch` hỗ trợ `parallel: true` (`Promise.all` cho các engine trong cùng một đợt, dừng sớm ngay khi Đợt 1 tìm thấy kết quả mức `source`).
+
+### Task 26: Docker Compose + Cloudflare WARP Proxy Sidecar
+
+**Files:**
+- Modify: `Dockerfile`, `docker-compose.yml`, `package.json`
+
+- [x] **Step 1:** Thêm cờ `--use-env-proxy` vào lệnh chạy Node 24 trong `Dockerfile` và `package.json`.
+- [x] **Step 2:** Thêm service `warp` (`caomingjun/warp:latest`) vào `docker-compose.yml` và cấu hình `HTTP_PROXY=http://warp:1080`, `HTTPS_PROXY=http://warp:1080`, kèm `NO_PROXY` cho toàn bộ tên miền Discord.
