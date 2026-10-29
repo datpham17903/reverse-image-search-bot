@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createSauceNao, SAUCENAO_HIDE_NORMAL, SAUCENAO_MOVIES_SHOWS_DBMASK } from "../../src/engines/saucenao.ts";
+import { createSauceNao, parseSauceNaoHtml, SAUCENAO_HIDE_NORMAL, SAUCENAO_MOVIES_SHOWS_DBMASK } from "../../src/engines/saucenao.ts";
 import { ImageError } from "../../src/images/download.ts";
 import type { EngineInput } from "../../src/engines/types.ts";
 
@@ -183,4 +183,36 @@ test("rotates across multiple API keys on 429 and falls back to web scrape", asy
   const r = await engine.search(input(), "saucenao");
   assert.equal(r.status, "ok");
   assert.deepEqual(usedKeys, ["k1", "k2"]);
+});
+
+test("extracts nhentai and hitomi gallery IDs from Index #18 H-Misc HTML and JSON without ext_urls", async () => {
+  const html = `<table class="resulttable"><tr><td class="resulttableimage"><img id="resImage0" title="Index #18: H-Misc (nhentai) - 1t.jpg" raw-rating="3" src="https://img1.saucenao.com/rsz/res/nhentai/518891%20%282982943%29%20--%20%5BMisaki%5D%20Hatsukoi%2F1t.jpg" data-src2="https://img1.saucenao.com/res/nhentai/518891%20%282982943%29%20--%20%5BMisaki%5D%20Hatsukoi%2F1t.jpg"/></td><td class="resulttablecontent"><div class="resultmatchinfo"><div class="resultsimilarityinfo">92.60%</div></div><div class="resultcontent"><div class="resulttitle"><strong>Hatsukoi no Hito wa _ My First Love [English]</strong><br /><small>初恋</small></div><div class="resultcontentcolumn"><strong>Creator(s): </strong>akutenkou, misaki<br /></div></div></td></tr></table>`;
+  const parsed = parseSauceNaoHtml(html);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0]!.url, "https://nhentai.net/g/518891/");
+  assert.equal(parsed[0]!.title, "Hatsukoi no Hito wa _ My First Love [English]");
+  assert.equal(parsed[0]!.detail, "Mã #518891 · Hitomi #2982943 · Trang 1 · Tác giả: akutenkou, misaki · nhentai.net");
+  assert.equal(parsed[0]!.adult, true);
+  assert.equal(parsed[0]!.previewUrl, "https://img1.saucenao.com/res/nhentai/518891%20%282982943%29%20--%20%5BMisaki%5D%20Hatsukoi%2F1t.jpg");
+
+  const jsonBody = JSON.stringify({
+    header: { status: 0 },
+    results: [{
+      header: {
+        similarity: "91.5",
+        thumbnail: "https://img1.saucenao.com/res/nhentai/489451%20%282786159%29%20--%20Test/2t.jpg",
+        index_id: 18,
+        index_name: "Index #18: H-Misc (nhentai) - 2t.jpg",
+      },
+      data: {
+        eng_name: "[Fetio] Inkya Joshi [English]",
+        creator: ["fetio"],
+      },
+    }],
+  });
+  const r = await createSauceNao({ fetch: respond(jsonBody), apiKey: "KEY", hideNormal: false }).search(input(), "saucenao");
+  assert.equal(r.status, "ok");
+  assert.equal(r.matches[0]!.url, "https://nhentai.net/g/489451/");
+  assert.equal(r.matches[0]!.detail, "Mã #489451 · Hitomi #2786159 · Trang 2 · Tác giả: fetio · nhentai.net");
+  assert.equal(r.matches[0]!.adult, true);
 });

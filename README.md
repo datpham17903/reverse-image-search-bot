@@ -12,11 +12,15 @@ Bot Discord tìm nguồn ảnh ngược (Reverse Image Search) tốc độ cao, 
 - **💸 Hoàn toàn Free & Không cần thẻ tín dụng:**
   - Chỉ yêu cầu duy nhất thông tin Bot Discord (`DISCORD_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_GUILD_ID`).
   - Không bắt buộc API trả phí như SerpApi hay Bright Data (vẫn hỗ trợ làm fallback tùy chọn nếu bạn có sẵn key).
-- **🔞 Hỗ trợ đầy đủ ảnh NSFW (2D & 3D) với Quy tắc Hiển thị An toàn:**
-  - **Tìm kiếm mọi nơi:** Dù người dùng gọi lệnh ở kênh thường hay kênh NSFW, bot vẫn mở khóa bộ lọc (`hide=0` trên SauceNAO, `family=no` trên Yandex, và đa sàn Booru trên IQDB) để tìm ra đúng link nguồn gốc.
-  - **Kiểm soát Preview theo kênh:**
-    - **Tại kênh thường (Non-NSFW):** Tự động ẩn ảnh thumbnail nhạy cảm và ẩn video preview để đảm bảo an toàn cộng đồng, chỉ trả về tên tác phẩm, tác giả và link nguồn.
-    - **Tại kênh 18+ (Age-Restricted / NSFW):** Hiển thị đầy đủ ảnh thumbnail và video clip cắt cảnh.
+- **🔞 Hỗ trợ đầy đủ ảnh NSFW (2D, Doujinshi/Hentai & 3D JAV/AV) với Spoiler Tự Động:**
+  - **Tìm kiếm mọi nơi:** Dù người dùng gọi lệnh ở kênh thường hay kênh NSFW, bot vẫn mở khóa bộ lọc (`hide=0` trên SauceNAO, `family=no` trên Yandex, đa sàn Booru trên IQDB và `avscan.cc` cho JAV/AV) để tìm ra đúng link nguồn gốc.
+  - **Giải mã Doujinshi / Hentai Manga đa sàn:** Bóc tách trực tiếp mã 6 số **nhentai**, mã gallery **Hitomi.la / E-Hentai**, số trang từ SauceNAO (`Index #18`, `#38`) và hiển thị thanh liên kết nhanh **Đọc / Tìm bản dịch** tới `nhentai`, `Hitomi.la`, `E-Hentai`, `Vi-Hentai`, `MimiHentai`.
+  - **Nhận diện JAV / AV (`avscan.cc`):** Tự động tìm mã phim JAV/AV, mốc thời gian cảnh cắt trong phim và link xem preview miễn phí không cần API key.
+  - **Kiểm soát Preview thông minh theo kênh (3 lớp nhận diện NSFW):**
+    - **Tại kênh thường (SFW):** Ảnh an toàn hiển thị trực tiếp (`preview.jpg`); ảnh NSFW hoặc chưa rõ phân loại tự động được bọc **Discord Spoiler (`SPOILER_preview.jpg`)** làm mờ cho tới khi người dùng chủ động bấm vào xem.
+    - **Tại kênh 18+ (Age-Restricted / NSFW):** Hiển thị trực tiếp đầy đủ ảnh thumbnail và link video clip cắt cảnh.
+- **📦 Hỗ trợ ảnh dung lượng lớn (tới 500 MB / 250 MP):**
+  - Tự động tải và nén ảnh JPEG 1200px trong bộ nhớ bằng `sharp` trước khi gửi tới các engine (kèm tự động fallback upload trực tiếp lên Yandex khi ảnh gốc trên Discord lớn hơn 10 MB).
 - **🔄 Cơ chế chống Rate-Limit & Tự động Fallback:**
   - **SauceNAO:** Hỗ trợ xoay vòng nhiều API key (`SAUCENAO_API_KEYS=key1,key2,...`) kết hợp tự động cào giao diện Web (`parseSauceNaoHtml`) khi không cấu hình key hoặc khi hết quota API.
   - **Danbooru + IQDB.org:** Kết hợp API Danbooru và tìm kiếm trực tiếp trên `iqdb.org` (bao phủ cùng lúc Danbooru, Gelbooru, Sankaku Complex, Yande.re, Konachan, Zerochan, Anime-Pictures).
@@ -37,10 +41,10 @@ Bot phân loại kết quả thành 3 cấp độ tin cậy:
 
 | Chế độ (`type`) | Đợt 1 (Chạy song song) | Đợt 2 (Fallback khi chưa đạt `source_found`) | Phù hợp cho |
 | :--- | :--- | :--- | :--- |
-| **`auto`** *(Mặc định)* | `SauceNAO` + `Danbooru/IQDB` + `trace.moe` | `Yandex Images` | Mọi loại ảnh (tự động nhận diện 2D, Anime, Manga, 3D) |
+| **`auto`** *(Mặc định)* | `SauceNAO` + `Danbooru/IQDB` + `trace.moe` + `AVScan` | `Yandex Images` | Mọi loại ảnh (tự động nhận diện 2D, Anime, Manga/Doujin, JAV/3D) |
 | **`anime`** | `trace.moe` + `SauceNAO` | `Yandex Images` | Ảnh chụp màn hình tập phim Anime (trả kèm số tập, mốc thời gian & video preview) |
 | **`art`** | `SauceNAO` + `Danbooru/IQDB` | `Yandex Images` | Tranh vẽ 2D, Fanart, Manga, Doujinshi, Hentai/Illust |
-| **`movie`** | `Yandex Images` | `trace.moe` | Phim người đóng, Cosplay, Idol, Ảnh đời thực (3D) |
+| **`movie`** | `AVScan` + `Yandex Images` | `trace.moe` | Phim người đóng, JAV/AV, Cosplay, Idol, Ảnh đời thực (3D) |
 
 ---
 

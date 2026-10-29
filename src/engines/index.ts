@@ -1,4 +1,5 @@
 import type { Config } from "../config.ts";
+import { createAvScan } from "./avscan.ts";
 import { createDanbooru } from "./danbooru.ts";
 import { createSauceNao } from "./saucenao.ts";
 import { createTraceMoe } from "./tracemoe.ts";
@@ -29,6 +30,7 @@ export function createEngines(config: Config, f: typeof fetch): {
         userId: config.danbooruUserId,
         includeIqdb: true,
       }),
+      avscan: createAvScan({ fetch: f }),
       yandex: createYandex({
         fetch: f,
         brightdataApiKey: config.brightdataApiKey,

@@ -7,11 +7,13 @@ export const SAUCENAO_HIDE_NORMAL = 3;
 export const SAUCENAO_MOVIES_SHOWS_DBMASK = 25165824;
 export const SAUCENAO_ANIME_INDEXES = [21, 22];
 const ADULT_INDEXES = new Set([2, 3, 18, 22, 38]);
+const DOUJIN_INDEXES = new Set([2, 3, 16, 18, 37, 38]);
 const SEARCH_URL = "https://saucenao.com/search.php";
 const SHORT_BLOCK_MS = 30_000;
 const LONG_BLOCK_MS = 3_600_000;
 
 const text = z.union([z.string(), z.number()]).transform(String);
+const textOrList = z.union([text, z.array(text).transform((a) => a.join(", "))]);
 const headerSchema = z.object({
   status: z.number(),
   short_remaining: z.number().optional(),
@@ -32,11 +34,14 @@ const itemSchema = z.object({
   data: z.object({
     ext_urls: z.array(z.string()).optional(),
     title: text.optional(),
+    eng_name: text.optional(),
+    jp_name: text.optional(),
     source: text.optional(),
     material: text.optional(),
-    member_name: text.optional(),
-    creator: text.optional(),
-    author_name: text.optional(),
+    member_name: textOrList.optional(),
+    creator: textOrList.optional(),
+    author_name: textOrList.optional(),
+    twitter_user_handle: text.optional(),
     part: text.optional(),
     est_time: text.optional(),
   }),
@@ -52,22 +57,98 @@ const ENTITIES: Record<string, string> = { "&quot;": '"', "&amp;": "&", "&#39;":
 const unescapeHtml = (s: string) => s.replace(/&(quot|amp|#39|apos|lt|gt);/g, (m) => ENTITIES[m] ?? m);
 const stripTags = (s: string) => unescapeHtml(s.replace(/<[^>]*>/g, "")).trim();
 
+export function cleanDoujinTitle(raw: string): string {
+  const base = raw
+    .replace(/\[[^\]]*\]|\{[^}]*\}|\((?:C\d+|COMIC1[^)]*|Reitaisai[^)]*)\)/gi, " ")
+    .split(/\s+_\s+|\s+\|\s+/)[0]!
+    .replace(/\s+/g, " ")
+    .trim();
+  return base || raw.trim();
+}
+
+export interface DoujinMeta {
+  nhentaiId?: string;
+  ehId?: string;
+  page?: string;
+  folderTitle?: string;
+  url: string;
+}
+
+export function extractDoujinMeta(
+  thumbUrl: string | undefined,
+  title: string,
+  indexId: number,
+  indexName = "",
+): DoujinMeta | null {
+  let decoded = "";
+  if (thumbUrl) {
+    try { decoded = decodeURIComponent(thumbUrl); } catch { decoded = thumbUrl; }
+  }
+  const nh = /\/res\/nhentai\/(\d+)(?:\s*\((\d+)\))?(?:\s*--\s*([^/?]+))?(?:\/(\d+)t?\.[a-z]+)?/i.exec(decoded);
+  if (nh) {
+    const nhentaiId = nh[1]!;
+    const ehId = nh[2];
+    const folderTitle = nh[3]?.trim();
+    const page = nh[4] ?? /-\s*(\d+)t?\.[a-z]+/i.exec(indexName)?.[1];
+    return {
+      nhentaiId,
+      ...(ehId ? { ehId } : {}),
+      ...(page ? { page } : {}),
+      ...(folderTitle ? { folderTitle } : {}),
+      url: `https://nhentai.net/g/${nhentaiId}/`,
+    };
+  }
+  const eh = /\/res\/(?:ehentai|hmisc)\/(\d+)(?:\s*--\s*([^/?]+))?(?:\/(\d+)t?\.[a-z]+)?/i.exec(decoded);
+  if (eh) {
+    const ehId = eh[1]!;
+    const folderTitle = eh[2]?.trim();
+    const page = eh[3] ?? /-\s*(\d+)t?\.[a-z]+/i.exec(indexName)?.[1];
+    return {
+      ehId,
+      ...(page ? { page } : {}),
+      ...(folderTitle ? { folderTitle } : {}),
+      url: `https://hitomi.la/galleries/${ehId}.html`,
+    };
+  }
+  if (DOUJIN_INDEXES.has(indexId)) {
+    const page = /-\s*(\d+)t?\.[a-z]+/i.exec(indexName)?.[1];
+    const q = encodeURIComponent(cleanDoujinTitle(title));
+    const url = indexId === 18
+      ? `https://nhentai.net/search/?q=${q}`
+      : `https://e-hentai.org/?f_search=${q}`;
+    return { ...(page ? { page } : {}), url };
+  }
+  return null;
+}
+
 function toMatch(it: Item): Match | null {
   const { header: h, data: d } = it;
-  const url = d.ext_urls?.[0];
+  const rawTitle = d.title ?? d.eng_name ?? d.jp_name ?? d.source ?? d.material ?? h.index_name;
+  const doujin = extractDoujinMeta(h.thumbnail, rawTitle, h.index_id, h.index_name);
+  const url = d.ext_urls?.[0] ?? doujin?.url;
   if (!url) return null;
   const isAnime = SAUCENAO_ANIME_INDEXES.includes(h.index_id);
-  const title = d.title ?? d.source ?? d.material ?? h.index_name;
+  const twHandle = d.twitter_user_handle ? `@${d.twitter_user_handle.replace(/^@/, "")}` : undefined;
+  const author = d.member_name ?? d.creator ?? d.author_name ?? twHandle;
+  const title =
+    (twHandle && (rawTitle === h.index_name || /^Created:/i.test(rawTitle)))
+      ? `Bài đăng X/Twitter của ${twHandle}`
+      : (rawTitle || doujin?.folderTitle || h.index_name);
   const hasEpisodeAndTime = d.part != null && d.est_time != null;
   let detail: string | undefined;
   if (isAnime) {
     const time = d.est_time?.split(" / ")[0];
     detail = [d.part != null ? `Tập ${d.part}` : undefined, time].filter(Boolean).join(" · ") || undefined;
   } else {
-    const author = d.member_name ?? d.creator ?? d.author_name;
-    detail = [author != null ? `Tác giả: ${author}` : undefined, hostname(url)].filter(Boolean).join(" · ") || undefined;
+    detail = [
+      doujin?.nhentaiId ? `Mã #${doujin.nhentaiId}` : undefined,
+      doujin?.ehId ? `Hitomi #${doujin.ehId}` : undefined,
+      doujin?.page ? `Trang ${doujin.page}` : undefined,
+      author != null ? `Tác giả: ${author}` : undefined,
+      hostname(url),
+    ].filter(Boolean).join(" · ") || undefined;
   }
-  const isAdult = ADULT_INDEXES.has(h.index_id) || Boolean(h.hidden);
+  const isAdult = ADULT_INDEXES.has(h.index_id) || Boolean(h.hidden) || Boolean(doujin);
   return {
     engine: "saucenao", title, url, ...(detail ? { detail } : {}),
     score: parseFloat(h.similarity), ...(h.thumbnail ? { previewUrl: h.thumbnail } : {}),
@@ -83,20 +164,34 @@ export function parseSauceNaoHtml(html: string): Match[] {
     const simMatch = /<div class="resultsimilarityinfo">(\d+(?:\.\d+)?)%<\/div>/.exec(block);
     if (!simMatch) continue;
     const score = parseFloat(simMatch[1]!);
-    const urlMatch = /<div class="resultcontent">[\s\S]*?<a href="(https?:\/\/(?!saucenao\.com)[^"]+)"/.exec(block);
-    if (!urlMatch) continue;
-    const url = unescapeHtml(urlMatch[1]!);
-    const idxMatch = /title="Index #(\d+):\s*([^"-]+)/.exec(block);
+    const idxMatch = /title="Index #(\d+):\s*([^"]+)/.exec(block);
     const indexId = idxMatch ? Number(idxMatch[1]) : 0;
-    const indexName = idxMatch ? unescapeHtml(idxMatch[2]!.trim()) : "SauceNAO";
+    const indexFull = idxMatch ? unescapeHtml(idxMatch[2]!.trim()) : "SauceNAO";
+    const indexName = indexFull.split(/\s+-\s+/)[0]!.trim() || "SauceNAO";
     const ratingMatch = /raw-rating="(\d+)"/.exec(block);
     const rawRating = ratingMatch ? Number(ratingMatch[1]) : 0;
-    const thumbMatch = /(?:data-src|src)="(https:\/\/img\d*\.saucenao\.com\/[^"]+)"/.exec(block);
+    const thumbMatch =
+      /data-src2="(https:\/\/img\d*\.saucenao\.com\/[^"]+)"/.exec(block) ??
+      /(?:data-src|src)="(https:\/\/img\d*\.saucenao\.com\/[^"]+)"/.exec(block);
     const previewUrl = thumbMatch ? unescapeHtml(thumbMatch[1]!) : undefined;
     const titleMatch = /<div class="resulttitle">([\s\S]*?)<\/div>/.exec(block);
-    const rawTitle = titleMatch ? stripTags(titleMatch[1]!) : indexName;
+    const strongTitle = titleMatch ? /<strong>([\s\S]*?)<\/strong>/.exec(titleMatch[1]!) : null;
+    const rawTitle = strongTitle
+      ? stripTags(strongTitle[1]!)
+      : titleMatch
+        ? stripTags(titleMatch[1]!.replace(/<br\s*\/?>/gi, " "))
+        : indexName;
+    const doujin = extractDoujinMeta(previewUrl, rawTitle, indexId, indexFull);
+    const urlMatch = /<div class="resultcontent">[\s\S]*?<a href="(https?:\/\/(?!saucenao\.com)[^"]+)"/.exec(block);
+    const url = urlMatch ? unescapeHtml(urlMatch[1]!) : doujin?.url;
+    if (!url) continue;
     const isAnime = SAUCENAO_ANIME_INDEXES.includes(indexId);
-    let title = rawTitle || indexName;
+    const authorMatch = /<strong>(?:Member|Creator(?:\(s\))?|Author|Artist|Twitter):\s*<\/strong>\s*(?:<a[^>]*>)?([^<]+)/i.exec(block);
+    const author = authorMatch ? stripTags(authorMatch[1]!) : undefined;
+    let title =
+      (author && /^Created:/i.test(rawTitle))
+        ? `Bài đăng X/Twitter của ${author.startsWith("@") ? author : `@${author}`}`
+        : (rawTitle || doujin?.folderTitle || indexName);
     let part: string | undefined;
     if (isAnime && /\s-\s(\d+)$/.test(title)) {
       const pm = /^(.*?)\s-\s(\d+)$/.exec(title);
@@ -104,17 +199,22 @@ export function parseSauceNaoHtml(html: string): Match[] {
     }
     const timeMatch = /Est Time:\s*([0-9:]+)/i.exec(block);
     const estTime = timeMatch?.[1];
-    const authorMatch = /<strong>(?:Member|Creator|Author|Artist):\s*<\/strong>\s*(?:<a[^>]*>)?([^<]+)/i.exec(block);
-    const author = authorMatch ? stripTags(authorMatch[1]!) : undefined;
     const hasEpisodeAndTime = Boolean(part && estTime);
     const detail = isAnime
       ? [part ? `Tập ${part}` : undefined, estTime].filter(Boolean).join(" · ") || undefined
-      : [author ? `Tác giả: ${author}` : undefined, hostname(url)].filter(Boolean).join(" · ") || undefined;
-    const isAdult = ADULT_INDEXES.has(indexId) || rawRating >= 2;
+      : [
+          doujin?.nhentaiId ? `Mã #${doujin.nhentaiId}` : undefined,
+          doujin?.ehId ? `Hitomi #${doujin.ehId}` : undefined,
+          doujin?.page ? `Trang ${doujin.page}` : undefined,
+          author ? `Tác giả: ${author}` : undefined,
+          hostname(url),
+        ].filter(Boolean).join(" · ") || undefined;
+    const isAdult = ADULT_INDEXES.has(indexId) || rawRating >= 2 || Boolean(doujin);
+    const isSafe = !isAdult && rawRating === 1;
     matches.push({
       engine: "saucenao", title, url, ...(detail ? { detail } : {}),
       score, ...(previewUrl ? { previewUrl } : {}),
-      adult: isAdult ? true : null, isAnime, hasEpisodeAndTime,
+      adult: isAdult ? true : isSafe ? false : null, isAnime, hasEpisodeAndTime,
     });
   }
   return matches.slice(0, 8);
@@ -240,7 +340,7 @@ export function createSauceNao(deps: {
           cursor = (idx + 1) % keys.length;
           const resp = await searchWithKey(key, jpeg, input);
           lastResp = resp;
-          if (resp.status !== "rate_limited" && resp.status !== "quota_exhausted") return resp;
+          if (resp.status !== "rate_limited" && resp.status !== "quota_exhausted" && !(webFallback && resp.status === "unavailable")) return resp;
         }
         if (webFallback) return await searchWeb(jpeg, input);
         return lastResp ?? fail("rate_limited", false);

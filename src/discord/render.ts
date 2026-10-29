@@ -1,11 +1,13 @@
 import { ButtonStyle, ComponentType, type APIEmbed } from "discord.js";
 import type { Config } from "../config.ts";
+import { cleanDoujinTitle } from "../engines/saucenao.ts";
 import { ENGINE_LABEL, type EngineId, type Match, type Mode, type ProviderId, type Tier, type TieredMatch } from "../engines/types.ts";
 import type { ImageCandidate } from "../images/candidates.ts";
 import type { ImageErrorCode } from "../images/download.ts";
 import type { ProviderStats } from "../limits/gates.ts";
 import type { DeepLink } from "../search/deeplinks.ts";
 import type { Progress, SearchOutcome } from "../search/orchestrator.ts";
+import { isDoujinMatch } from "../search/tiers.ts";
 import { customId } from "./custom-id.ts";
 import { imageErrorText, MODE_LABEL, msg, reason, TIER_LABEL } from "./messages.ts";
 
@@ -19,7 +21,7 @@ const TIER_COLOR: Record<Tier, number> = { source: 0x23a55a, maybe: 0xf0b232, re
 const MODES: Mode[] = ["auto", "anime", "art", "movie"];
 const PROVIDER_LABEL: Record<ProviderId, string> = {
   tracemoe: "trace.moe", saucenao: "SauceNAO", danbooru: "Danbooru", iqdb: "IQDB",
-  yandex_direct: "Yandex Direct", brightdata: "Bright Data", serpapi: "SerpApi",
+  avscan: "AVScan", yandex_direct: "Yandex Direct", brightdata: "Bright Data", serpapi: "SerpApi",
 };
 
 const payload = (embeds: APIEmbed[], components: unknown[] = [], content?: string): Payload =>
@@ -43,6 +45,7 @@ export function previewAllowed(m: Match, nsfwChannel: boolean): boolean {
   if (nsfwChannel) return true;
   switch (m.engine) {
     case "yandex": return false;
+    case "avscan": return false;
     case "danbooru": return m.rating === "g";
     case "tracemoe": return m.adult === false;
     case "saucenao": return m.adult !== true;
@@ -52,7 +55,7 @@ export function previewAllowed(m: Match, nsfwChannel: boolean): boolean {
 function pct(m: Match): string | null {
   if (m.score === undefined) return null;
   if (m.engine === "tracemoe") return `${Math.round(m.score * 100)}%`;
-  if (m.engine === "saucenao" || m.engine === "danbooru") return `${Math.round(m.score)}%`;
+  if (m.engine === "saucenao" || m.engine === "danbooru" || m.engine === "avscan") return `${Math.round(m.score)}%`;
   return null;
 }
 
@@ -67,6 +70,21 @@ function detailLine(m: Match, nsfwChannel: boolean): string {
     ENGINE_LABEL[m.engine],
     previewAllowed(m, nsfwChannel) && safeUrl(m.videoUrl) && mdLink(msg.watchClip, m.videoUrl),
   ]);
+}
+
+function doujinLinksLine(m: Match): string | null {
+  if (!isDoujinMatch(m)) return null;
+  const nhId = (m.detail && /Mã #(\d+)/.exec(m.detail)?.[1]) ?? /nhentai\.[a-z]+\/g\/(\d+)/i.exec(m.url)?.[1];
+  const ehId = (m.detail && /Hitomi #(\d+)/.exec(m.detail)?.[1]) ?? /(?:hitomi\.la\/galleries\/|e-hentai\.org\/g\/)(\d+)/i.exec(m.url)?.[1];
+  const q = encodeURIComponent(cleanDoujinTitle(m.title));
+  const links: [string, string][] = [
+    [nhId ? `nhentai #${nhId}` : "nhentai", nhId ? `https://nhentai.net/g/${nhId}/` : `https://nhentai.net/search/?q=${q}`],
+    [ehId ? `Hitomi.la #${ehId}` : "Hitomi.la", ehId ? `https://hitomi.la/galleries/${ehId}.html` : `https://hitomi.la/search.html?${q}`],
+    ["E-Hentai", `https://e-hentai.org/?f_search=${q}`],
+    ["Vi-Hentai", `https://vi-hentai.net/tim-kiem?keyword=${q}`],
+    ["MimiHentai", `https://mimihentai.com/tim-kiem?title=${q}`],
+  ];
+  return `**Đọc / Tìm bản dịch:** ${links.map(([name, u]) => mdLink(name, u)).join(" · ")}`;
 }
 
 function candidateLine(i: number, m: TieredMatch, withTier: boolean): string {
@@ -128,17 +146,25 @@ export function renderOutcome(o: SearchOutcome, ctx: RenderContext): Payload {
   if (o.state === "found" && o.main) {
     const main = o.main;
     const candidates = o.others.map((m, i) => candidateLine(i + 2, m, true));
+    const head = [detailLine(main, ctx.nsfwChannel), doujinLinksLine(main)].filter((x): x is string => Boolean(x));
     const embed: APIEmbed = {
       author: { name: TIER_LABEL[main.tier] }, color: TIER_COLOR[main.tier],
       title: escapeMd(main.title).slice(0, TITLE_MAX),
-      description: fitDescription([detailLine(main, ctx.nsfwChannel)], candidates, `**${msg.others}**`, ctx.deepLinks),
+      description: fitDescription(head, candidates, `**${msg.others}**`, ctx.deepLinks),
       footer,
     };
     const url = safeUrl(main.url);
     if (url) embed.url = url;
-    const preview = previewAllowed(main, ctx.nsfwChannel) ? safeUrl(main.previewUrl) : null;
+    const rawPreview = safeUrl(main.previewUrl);
+    const preview = previewAllowed(main, ctx.nsfwChannel) ? rawPreview : null;
     if (preview) embed.image = { url: preview };
-    return payload([embed], components);
+    const out = payload([embed], components);
+    const crossAdult = o.tiered.some(m => m.adult === true);
+    const shouldSpoiler = !ctx.nsfwChannel && Boolean(rawPreview) && (!preview || main.adult !== false || crossAdult);
+    if (shouldSpoiler && rawPreview) {
+      Object.defineProperty(out, "spoilerPreviewUrl", { value: rawPreview, enumerable: false });
+    }
+    return out;
   }
 
   if (o.state === "incomplete") {

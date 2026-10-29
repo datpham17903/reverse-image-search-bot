@@ -1,7 +1,7 @@
 import type { EngineId, Tier, TieredMatch } from "../engines/types.ts";
 
 const TIER_RANK: Record<Tier, number> = { source: 0, maybe: 1, related: 2 };
-const ENGINE_RANK: Record<EngineId, number> = { tracemoe: 0, saucenao: 1, danbooru: 2, yandex: 3 };
+const ENGINE_RANK: Record<EngineId, number> = { tracemoe: 0, saucenao: 1, avscan: 2, danbooru: 3, yandex: 4 };
 
 export function pickResults(ms: TieredMatch[]): { main?: TieredMatch; others: TieredMatch[] } {
   const sorted = [...ms].sort((a, b) =>

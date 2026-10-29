@@ -20,7 +20,7 @@ export interface Gates {
   stats(): ProviderStats[];
 }
 
-const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "yandex_direct", "brightdata", "serpapi"];
+const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "avscan", "yandex_direct", "brightdata", "serpapi"];
 const LEGACY_STATS_PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "brightdata", "serpapi"];
 const DAY_MS = 86_400_000;
 const TRACE_DEFAULT_QUOTA = 100;
@@ -53,6 +53,7 @@ export class ProviderGates implements Gates {
           saucenao: new Semaphore(16),
           danbooru: new Semaphore(16),
           iqdb: new Semaphore(16),
+          avscan: new Semaphore(16),
           yandex_direct: new Semaphore(16),
           brightdata: new Semaphore(16),
           serpapi: new Semaphore(8),
@@ -62,6 +63,7 @@ export class ProviderGates implements Gates {
           saucenao: new Semaphore(2),
           danbooru: new Semaphore(1),
           iqdb: new Semaphore(4),
+          avscan: new Semaphore(4),
           yandex_direct: new Semaphore(8),
           brightdata: new Semaphore(8),
           serpapi: new Semaphore(1),
@@ -116,6 +118,7 @@ export class ProviderGates implements Gates {
         return this.now() < this.saucenaoLongUntil ? "server_quota" : "ok";
       case "danbooru":
       case "iqdb":
+      case "avscan":
       case "yandex_direct":
         return "ok";
       case "brightdata":
@@ -155,6 +158,7 @@ export class ProviderGates implements Gates {
         case "saucenao":
         case "danbooru":
         case "iqdb":
+        case "avscan":
         case "yandex_direct":
           return { provider, usedToday, allowanceToday: null,
             usedPeriod: usedToday, periodLimit: null, blocked: this.budget(provider, "primary") === "server_quota" };

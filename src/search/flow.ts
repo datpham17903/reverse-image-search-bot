@@ -10,10 +10,10 @@ const ORDERS: Record<Exclude<Mode, "auto">, EngineId[]> = {
   movie: ["yandex", "saucenao"],
 };
 const PARALLEL_WAVES: Record<Mode, readonly (readonly EngineId[])[]> = {
-  auto: [["saucenao", "danbooru", "tracemoe"], ["yandex"]],
+  auto: [["saucenao", "danbooru", "tracemoe", "avscan"], ["yandex"]],
   anime: [["tracemoe", "saucenao"], ["yandex"]],
   art: [["saucenao", "danbooru"], ["yandex"]],
-  movie: [["yandex", "saucenao"]],
+  movie: [["avscan", "yandex", "saucenao"]],
 };
 
 export function nextCall(s: FlowState): PlannedCall | null {

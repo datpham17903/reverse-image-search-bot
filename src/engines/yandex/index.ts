@@ -19,7 +19,7 @@ export function createYandex(
     version: 1,
     cacheParams: () => "sites",
     search: async (input, provider) => {
-      if (provider === "yandex_direct") return yandexViaDirect(input.image.url, { fetch: deps.fetch, signal: input.signal });
+      if (provider === "yandex_direct") return yandexViaDirect(input.image.url, { fetch: deps.fetch, signal: input.signal, jpeg: input.image.jpeg });
       if (provider === "brightdata") {
         return yandexViaBrightData(input.image.url, {
           fetch: deps.fetch, apiKey: deps.brightdataApiKey ?? "", zone: deps.brightdataZone ?? "", signal: input.signal,

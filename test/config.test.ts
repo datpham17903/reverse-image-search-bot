@@ -12,8 +12,8 @@ test("applies unlimited and zero-delay defaults and works with only Discord env 
   assert.equal(c.sqlitePath, "./data/bot.db");
   assert.equal(c.brightdataMonthlyCredits, 5000);
   assert.equal(c.serpapiMonthlySearches, 250);
-  assert.equal(c.imageMaxBytes, 10485760);
-  assert.equal(c.imageMaxPixels, 20000000);
+  assert.equal(c.imageMaxBytes, 524288000);
+  assert.equal(c.imageMaxPixels, 250000000);
   assert.equal(c.engineTimeoutMs, 15000);
   assert.equal(c.jobDeadlineMs, 60000);
   assert.equal(c.maxActiveJobs, 500);

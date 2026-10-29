@@ -24,10 +24,15 @@ function hostname(url: string): string {
 }
 
 export function sitesToMatches(sites: YandexSite[]): Match[] {
-  return sites.map((s) => ({
-    engine: "yandex", title: s.title, url: s.url, domain: s.domain,
-    ...(s.thumbnailUrl ? { previewUrl: s.thumbnailUrl } : {}), adult: null,
-  }));
+  return sites.map((s) => {
+    const desc = s.description?.trim();
+    const detail = desc ? [desc.slice(0, 120), s.domain].filter(Boolean).join(" · ") : undefined;
+    return {
+      engine: "yandex", title: s.title, url: s.url, domain: s.domain,
+      ...(detail ? { detail } : {}),
+      ...(s.thumbnailUrl ? { previewUrl: s.thumbnailUrl } : {}), adult: null,
+    };
+  });
 }
 
 const fail = (status: EngineResponse["status"], sent: boolean, extra: Partial<EngineResponse> = {}): EngineResponse =>

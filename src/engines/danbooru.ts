@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { ImageError } from "../images/download.ts";
 import { PreSendError, isAbortError, sendRequest } from "./http.ts";
 import type { Engine, EngineInput, EngineResponse, Match, ProviderId } from "./types.ts";
 
@@ -90,7 +89,9 @@ export function createDanbooru(deps: {
     ...(hasAuth ? { Authorization: `Basic ${Buffer.from(`${deps.login}:${deps.apiKey}`).toString("base64")}` } : {}),
     "User-Agent": `TimNguonBot/1.0 (user #${deps.userId || "anon"})`,
   };
-  const providers: readonly ProviderId[] = deps.includeIqdb ? ["danbooru", "iqdb"] : ["danbooru"];
+  const providers: readonly ProviderId[] = deps.includeIqdb
+    ? hasAuth ? ["danbooru", "iqdb"] : ["iqdb"]
+    : ["danbooru"];
 
   async function searchDanbooru(input: EngineInput): Promise<EngineResponse> {
     try {
@@ -113,17 +114,11 @@ export function createDanbooru(deps: {
   }
 
   async function searchIqdb(input: EngineInput): Promise<EngineResponse> {
-    let jpeg: Buffer;
     try {
-      jpeg = await input.image.jpeg();
-    } catch (err) {
-      if (err instanceof ImageError) return fail("invalid_input", false);
-      return fail("unavailable", false);
-    }
-    try {
-      const form = new FormData();
-      form.append("file", new Blob([new Uint8Array(jpeg)], { type: "image/jpeg" }), "image.jpg");
-      const res = await sendRequest(deps.fetch, IQDB_URL, { method: "POST", body: form, signal: input.signal });
+      const res = await sendRequest(deps.fetch, `${IQDB_URL}?url=${encodeURIComponent(input.image.url)}`, {
+        headers: { "User-Agent": headers["User-Agent"]! },
+        signal: input.signal,
+      });
       if (res.status === 429) { await res.body?.cancel(); return fail("rate_limited", true); }
       if (res.status !== 200) { await res.body?.cancel(); return fail("unavailable", true); }
       const html = await res.text();

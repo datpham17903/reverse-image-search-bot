@@ -34,7 +34,7 @@ const SESSION_MAX_BYTES = 134_217_728;
 const PICK_MAX_BYTES = 1_048_576;
 
 export function createApp(o: {
-  config: Config; db: Db; engines: Record<EngineId, Engine>;
+  config: Config; db: Db; engines: Partial<Record<EngineId, Engine>> & Record<"tracemoe" | "saucenao" | "danbooru" | "yandex", Engine>;
   now?: () => number; fetch?: typeof fetch; sleep?: (ms: number) => Promise<void>; loadImage?: App["loadImage"];
 }): App {
   const { config } = o;

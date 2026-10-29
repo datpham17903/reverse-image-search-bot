@@ -15,11 +15,12 @@ function hostname(url: string): string {
   try { return new URL(url).hostname; } catch { return ""; }
 }
 
-function toSite(title: unknown, url: unknown, thumb: unknown): YandexSite | null {
+function toSite(title: unknown, url: unknown, thumb: unknown, description?: unknown): YandexSite | null {
   if (typeof title !== "string" || !title.trim() || typeof url !== "string" || !/^https?:\/\//i.test(url)) return null;
   if (!hostname(url)) return null;
   const t = typeof thumb === "string" && /^(https?:)?\/\//i.test(thumb) ? thumb.replace(/^\/\//, "https://") : undefined;
-  return { title, url, domain: hostname(url), ...(t ? { thumbnailUrl: t } : {}) };
+  const desc = typeof description === "string" && description.trim() ? description.trim() : undefined;
+  return { title, url, domain: hostname(url), ...(t ? { thumbnailUrl: t } : {}), ...(desc ? { description: desc } : {}) };
 }
 
 // Extracts site matches from both legacy data-state.sites and modern initialState.cbirSites structures.
@@ -48,7 +49,7 @@ function sitesFromState(html: string): YandexSite[] | null {
     if (!sites) continue;
     const out: YandexSite[] = [];
     for (const s of sites as Record<string, any>[]) {
-      const site = toSite(s?.title, s?.url, s?.thumb?.url ?? s?.thumb ?? s?.originalImage?.url);
+      const site = toSite(s?.title, s?.url, s?.thumb?.url ?? s?.thumb ?? s?.originalImage?.url, s?.description);
       if (site) out.push(site);
     }
     if (out.length > 0) return out;

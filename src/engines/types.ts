@@ -1,5 +1,5 @@
-export type EngineId = "tracemoe" | "saucenao" | "danbooru" | "yandex";
-export type ProviderId = "tracemoe" | "saucenao" | "danbooru" | "iqdb" | "yandex_direct" | "brightdata" | "serpapi";
+export type EngineId = "tracemoe" | "saucenao" | "danbooru" | "avscan" | "yandex";
+export type ProviderId = "tracemoe" | "saucenao" | "danbooru" | "iqdb" | "avscan" | "yandex_direct" | "brightdata" | "serpapi";
 export type Mode = "auto" | "anime" | "art" | "movie";
 export type Tier = "source" | "maybe" | "related";
 export type CallPurpose = "primary" | "anime_followup" | "unknown_check" | "extra";
@@ -23,4 +23,4 @@ export interface Engine {
 }
 export interface EngineOutcome { engine: EngineId; status: OutcomeStatus; matches: Match[]; via?: ProviderId; fromCache?: boolean }
 export interface TieredMatch extends Match { tier: Tier }
-export const ENGINE_LABEL: Record<EngineId, string> = { tracemoe: "trace.moe", saucenao: "SauceNAO", danbooru: "Danbooru", yandex: "Yandex" };
+export const ENGINE_LABEL: Record<EngineId, string> = { tracemoe: "trace.moe", saucenao: "SauceNAO", danbooru: "Danbooru", avscan: "AVScan", yandex: "Yandex" };

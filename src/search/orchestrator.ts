@@ -31,14 +31,31 @@ export async function runSearch(req: SearchRequest, run: Runner): Promise<Search
       const batch = nextBatch({ mode: req.mode, outcomes, tiered: tierAll(outcomes.flatMap(o => o.matches)) });
       if (batch.length === 0) break;
       await req.onProgress?.({ done: outcomes.map(o => o.engine), current: batch[0]!.engine });
-      const results = await Promise.all(
-        batch.map(call =>
+      const results = await new Promise<EngineOutcome[]>((resolve, reject) => {
+        const done: EngineOutcome[] = [];
+        let settled = false;
+        let remaining = batch.length;
+        for (const call of batch) {
           run(call.engine, {
             guildId: req.guildId, userId: req.userId, mode: req.mode, nsfwChannel: req.nsfwChannel,
             image: req.image, deadlineAt: req.deadlineAt, purpose: call.purpose,
-          }),
-        ),
-      );
+          }).then((o) => {
+            if (settled) return;
+            done.push(o);
+            remaining--;
+            const hasSource = tierAll(o.matches).some((t) => t.tier === "source");
+            if (hasSource || o.status === "deadline" || remaining === 0) {
+              settled = true;
+              resolve(done);
+            }
+          }, (err) => {
+            if (!settled) {
+              settled = true;
+              reject(err);
+            }
+          });
+        }
+      });
       outcomes.push(...results);
       if (results.some(o => o.status === "deadline")) break;
     }

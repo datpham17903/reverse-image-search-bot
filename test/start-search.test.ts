@@ -22,7 +22,7 @@ function engines(delay: () => number = () => 0): Record<EngineId, Engine> {
   });
   return {
     tracemoe: mk("tracemoe", ["tracemoe"]), saucenao: mk("saucenao", ["saucenao"]),
-    danbooru: mk("danbooru", ["danbooru"]), yandex: mk("yandex", ["brightdata", "serpapi"]),
+    danbooru: mk("danbooru", ["danbooru"]), avscan: mk("avscan", ["avscan"]), yandex: mk("yandex", ["brightdata", "serpapi"]),
   };
 }
 

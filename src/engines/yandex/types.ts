@@ -1,1 +1,1 @@
-export interface YandexSite { title: string; url: string; domain: string; thumbnailUrl?: string }
+export interface YandexSite { title: string; url: string; domain: string; thumbnailUrl?: string; description?: string }

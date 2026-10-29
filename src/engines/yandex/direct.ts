@@ -18,9 +18,11 @@ const DIRECT_HEADERS: Record<string, string> = {
 const fail = (status: EngineResponse["status"], sent: boolean, extra: Partial<EngineResponse> = {}): EngineResponse =>
   ({ status, matches: [], sent, ...extra });
 
+const UPLOAD_URL = "https://yandex.com/images-apphost/image-download?cbird=111&images_avatars_size=preview&images_avatars_namespace=images-cbir";
+
 export async function yandexViaDirect(
   imageUrl: string,
-  deps: { fetch: typeof fetch; signal: AbortSignal },
+  deps: { fetch: typeof fetch; signal: AbortSignal; jpeg?: () => Promise<Buffer> },
 ): Promise<EngineResponse> {
   try {
     const res = await sendRequest(deps.fetch, yandexDirectUrl(imageUrl), {
@@ -30,7 +32,29 @@ export async function yandexViaDirect(
     });
     if (res.status === 429) { await res.body?.cancel(); return fail("rate_limited", true); }
     if (res.status !== 200) { await res.body?.cancel(); return fail("unavailable", true); }
-    const sites = parseYandexSites(await res.text());
+    let sites = parseYandexSites(await res.text());
+    if (sites.length === 0 && deps.jpeg) {
+      const buf = await deps.jpeg().catch(() => Buffer.alloc(0));
+      if (buf.length > 0) {
+        const up = await sendRequest(deps.fetch, UPLOAD_URL, {
+          method: "POST",
+          headers: { ...DIRECT_HEADERS, "Content-Type": "image/jpeg" },
+          body: new Uint8Array(buf),
+          signal: deps.signal,
+        });
+        if (up.status === 200) {
+          const data = (await up.json().catch(() => null)) as { cbir_id?: string } | null;
+          if (data?.cbir_id) {
+            const r2 = await sendRequest(
+              deps.fetch,
+              `https://yandex.com/images/search?rpt=imageview&cbir_page=sites&family=no&cbir_id=${encodeURIComponent(data.cbir_id)}`,
+              { method: "GET", headers: DIRECT_HEADERS, signal: deps.signal },
+            );
+            if (r2.status === 200) sites = parseYandexSites(await r2.text());
+          }
+        }
+      }
+    }
     if (sites.length === 0) return fail("no_match", true);
     return { status: "ok", matches: sitesToMatches(sites), sent: true };
   } catch (err) {

@@ -3,7 +3,7 @@ import type { UsageStore } from "../store/usage.ts";
 
 const FAILURE_THRESHOLD = 3;
 const UNHEALTHY_MS = 3_600_000;
-const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "yandex_direct", "brightdata", "serpapi"];
+const PROVIDERS: readonly ProviderId[] = ["tracemoe", "saucenao", "danbooru", "iqdb", "avscan", "yandex_direct", "brightdata", "serpapi"];
 
 interface Entry { failures: number; unhealthyUntil: number | null }
 type Snapshot = Record<ProviderId, { healthy: boolean; failures: number; unhealthyUntil: number | null }>;
@@ -23,12 +23,12 @@ export class ProviderHealth {
   }
 
   isHealthy(p: ProviderId): boolean {
-    const until = this.state[p].unhealthyUntil;
+    const until = this.state[p]?.unhealthyUntil ?? null;
     return until === null || this.now() >= until;
   }
 
   noteParseFailure(p: ProviderId): void {
-    const e = this.state[p];
+    const e = (this.state[p] ??= { failures: 0, unhealthyUntil: null });
     e.failures++;
     if (e.failures >= FAILURE_THRESHOLD) {
       e.unhealthyUntil = this.now() + UNHEALTHY_MS;

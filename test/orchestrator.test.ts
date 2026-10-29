@@ -62,7 +62,7 @@ test("runSearch with parallel: true fires fast wave concurrently and stops when 
     return engine === "danbooru" ? o("danbooru", "ok", [m("danbooru", 95)]) : o(engine, "no_match");
   };
   const r = await runSearch({ ...req(), parallel: true }, run);
-  assert.deepEqual(called, ["saucenao", "danbooru", "tracemoe"]);
+  assert.deepEqual(called, ["saucenao", "danbooru", "tracemoe", "avscan"]);
   assert.equal(r.state, "found");
   assert.equal(r.main?.engine, "danbooru");
 });

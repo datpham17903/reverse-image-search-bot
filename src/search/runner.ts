@@ -25,7 +25,7 @@ export function cacheKey(guildId: string, engine: Engine, params: string, sha256
 }
 
 export function createRunner(deps: {
-  engines: Record<EngineId, Engine>; gates: Gates; cache: ResultCache; usage: UsageStore;
+  engines: Partial<Record<EngineId, Engine>>; gates: Gates; cache: ResultCache; usage: UsageStore;
   health: ProviderHealth; userLimits: UserLimits; config: Config; now: () => number;
 }): Runner {
   const { engines, gates, cache, usage, health, userLimits, config, now } = deps;
@@ -99,6 +99,7 @@ export function createRunner(deps: {
 
   return (engineId, ctx) => {
     const engine = engines[engineId];
+    if (!engine) return Promise.resolve({ engine: engineId, status: "no_match", matches: [] });
     const key = cacheKey(ctx.guildId, engine, engine.cacheParams({ mode: ctx.mode, nsfwChannel: ctx.nsfwChannel }), ctx.image.sha256);
     const cached = cache.get(key);
     if (cached) {
